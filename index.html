@@ -11,7 +11,7 @@ user-scalable=no">
 
 <meta name="theme-color" content="#05070a">
 
-<title>AprilTag iPad V5</title>
+<title>AprilTag iPad V5.1</title>
 
 <style>
 
@@ -22,15 +22,11 @@ user-scalable=no">
 html,body{
     margin:0;
     width:100%;
-    height:100%;
+    min-height:100%;
     background:#05070a;
     color:white;
-    font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "SF Pro Display",
-    system-ui,
-    sans-serif;
+    font-family:-apple-system,BlinkMacSystemFont,
+    "SF Pro Display",system-ui,sans-serif;
 }
 
 body{
@@ -42,9 +38,9 @@ body{
     max-width:900px;
     margin:auto;
     padding:
-    env(safe-area-inset-top)
-    14px
-    env(safe-area-inset-bottom);
+        env(safe-area-inset-top)
+        14px
+        env(safe-area-inset-bottom);
 }
 
 h1{
@@ -61,22 +57,29 @@ h1{
 .viewer{
     position:relative;
     width:100%;
-    aspect-ratio:4/3;
+    aspect-ratio:3/4;
     overflow:hidden;
     border-radius:20px;
     background:#111;
     border:1px solid #ffffff22;
 }
 
-video{
+video,
+#overlay{
     position:absolute;
+    inset:0;
     width:100%;
     height:100%;
-    inset:0;
+}
 
-    object-fit:cover;
+video{
+    object-fit:contain;
+    background:#000;
+}
 
-    background:#111;
+#overlay{
+    z-index:1;
+    pointer-events:none;
 }
 
 .message{
@@ -106,7 +109,6 @@ video{
     margin-top:5px;
     font-size:13px;
     color:#b6bec8;
-    word-break:break-word;
 }
 
 .buttons{
@@ -117,12 +119,9 @@ video{
 
 button{
     flex:1;
-
     min-height:52px;
-
     border:0;
     border-radius:14px;
-
     font-size:16px;
     font-weight:700;
 }
@@ -144,16 +143,11 @@ button{
 
 .info{
     margin-top:14px;
-
     padding:12px;
-
     border-radius:14px;
-
     background:#11161d;
-
     font-size:13px;
-    line-height:1.5;
-
+    line-height:1.55;
     color:#b8c0cb;
 }
 
@@ -169,9 +163,12 @@ button{
     color:#ffd36b;
 }
 
+.tag{
+    color:#70e59b;
+}
+
 </style>
 </head>
-
 
 <body>
 
@@ -180,38 +177,39 @@ button{
 <h1>AprilTag iPad</h1>
 
 <div class="version">
-V5.0 — Test caméra
-</div>
-
-
-<div class="viewer">
-
-<video
-    id="camera"
-    autoplay
-    muted
-    playsinline>
-</video>
-
-
-<div class="message">
-
-<div
-    id="status"
-    class="status">
-    Caméra non démarrée
+V5.1 — Détection tag36h11
 </div>
 
 <div
-    id="detail"
-    class="detail">
-    Touchez « Démarrer caméra ».
-</div>
+    id="viewer"
+    class="viewer">
+
+    <video
+        id="camera"
+        autoplay
+        muted
+        playsinline>
+    </video>
+
+    <canvas id="overlay"></canvas>
+
+    <div class="message">
+
+        <div
+            id="status"
+            class="status">
+            Caméra non démarrée
+        </div>
+
+        <div
+            id="detail"
+            class="detail">
+            Touchez « Démarrer caméra ».
+        </div>
+
+    </div>
 
 </div>
-
-</div>
-
 
 <div class="buttons">
 
@@ -229,21 +227,36 @@ V5.0 — Test caméra
 
 </div>
 
-
 <div
     id="diagnostic"
     class="info">
-    Diagnostic en attente…
+    Chargement du moteur AprilTag…
 </div>
 
-
 </main>
+
+
+<!--
+Moteur AprilTag tag36h11 compilé avec Emscripten
+-->
+<script
+src="https://raw.githubusercontent.com/dividuum/apriltags-emscripten/master/html/apriltag.js">
+</script>
 
 
 <script>
 
 const video =
 document.getElementById("camera");
+
+const viewer =
+document.getElementById("viewer");
+
+const overlay =
+document.getElementById("overlay");
+
+const overlayCtx =
+overlay.getContext("2d");
 
 const startButton =
 document.getElementById("start");
@@ -263,10 +276,22 @@ document.getElementById("diagnostic");
 
 let stream = null;
 
+let detector = null;
 
-/* ------------------------------------------------
-   AFFICHAGE DES INFORMATIONS
------------------------------------------------- */
+let detectionRunning = false;
+
+let detectorReady = false;
+
+let detectorTimer = null;
+
+let detectedFrames = 0;
+
+let totalFrames = 0;
+
+
+/* =============================================
+   MESSAGE
+============================================= */
 
 function message(title,text,type=""){
 
@@ -279,51 +304,224 @@ function message(title,text,type=""){
 }
 
 
-/* ------------------------------------------------
-   DIAGNOSTIC SAFARI
------------------------------------------------- */
+/* =============================================
+   CRÉATION DU DÉTECTEUR APRILTAG
+============================================= */
 
-function showDiagnostic(){
+function createAprilTagDetector(){
 
-    let txt = "";
+    if(
+        typeof Module === "undefined" ||
+        typeof Runtime === "undefined" ||
+        !Module.cwrap
+    ){
 
-    txt +=
-    "HTTPS : " +
-    (window.isSecureContext ? "OUI" : "NON");
+        detectorReady = false;
 
-    txt += "<br>";
+        diagnostic.innerHTML =
+        "<span class='error'>" +
+        "MOTEUR APRILTAG : NON CHARGÉ" +
+        "</span><br>" +
+        "La caméra peut fonctionner mais pas la détection.";
 
-    txt +=
-    "MediaDevices : " +
-    (navigator.mediaDevices ? "OUI" : "NON");
+        return null;
+    }
 
-    txt += "<br>";
 
-    txt +=
-    "getUserMedia : " +
-    (
-        navigator.mediaDevices &&
-        navigator.mediaDevices.getUserMedia
-        ? "OUI"
-        : "NON"
+    const detections = [];
+
+
+    const detect =
+    Module.cwrap(
+        "detect",
+        "number",
+        [
+            "number",
+            "number",
+            "number",
+            "number"
+        ]
     );
 
-    txt += "<br>";
 
-    txt +=
-    "Navigateur : " +
-    navigator.userAgent;
+    const detectedCallback =
+    Runtime.addFunction(
 
-    diagnostic.innerHTML = txt;
+        function(
+
+            id,
+
+            x1,y1,
+            x2,y2,
+            x3,y3,
+            x4,y4,
+
+            m00,m01,m02,
+            m10,m11,m12,
+            m20,m21,m22
+
+        ){
+
+            detections.push({
+
+                id:id,
+
+                corners:[
+
+                    {x:x1,y:y1},
+                    {x:x2,y:y2},
+                    {x:x3,y:y3},
+                    {x:x4,y:y4}
+
+                ],
+
+                matrix:[
+                    m00,m01,m02,
+                    m10,m11,m12,
+                    m20,m21,m22
+                ]
+
+            });
+
+        }
+
+    );
+
+
+    detectorReady = true;
+
+
+    return function(canvas){
+
+        const ctx =
+        canvas.getContext(
+            "2d",
+            {
+                willReadFrequently:true
+            }
+        );
+
+
+        const imageData =
+        ctx.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+
+        const byteCount =
+        imageData.data.length;
+
+
+        const buffer =
+        Module._malloc(byteCount);
+
+
+        Module.HEAPU8.set(
+            imageData.data,
+            buffer
+        );
+
+
+        detections.length = 0;
+
+
+        detect(
+
+            detectedCallback,
+
+            canvas.width,
+
+            canvas.height,
+
+            buffer
+
+        );
+
+
+        Module._free(buffer);
+
+
+        return detections.slice();
+
+    };
+
 }
 
 
-showDiagnostic();
+/* =============================================
+   CANVAS DE DÉTECTION
+============================================= */
+
+const detectionCanvas =
+document.createElement("canvas");
+
+const detectionCtx =
+detectionCanvas.getContext(
+    "2d",
+    {
+        willReadFrequently:true
+    }
+);
 
 
-/* ------------------------------------------------
+/* =============================================
+   INITIALISATION MOTEUR
+============================================= */
+
+function initialiseDetector(){
+
+    try{
+
+        detector =
+        createAprilTagDetector();
+
+
+        if(detector){
+
+            diagnostic.innerHTML =
+            "<span class='ok'>" +
+            "MOTEUR APRILTAG : PRÊT" +
+            "</span><br>" +
+            "Famille : tag36h11";
+
+        }
+
+    }
+
+    catch(error){
+
+        console.error(error);
+
+        diagnostic.innerHTML =
+        "<span class='error'>" +
+        "ERREUR MOTEUR APRILTAG" +
+        "</span><br>" +
+        error.message;
+
+    }
+
+}
+
+
+/*
+Le vieux module Emscripten est généralement
+initialisé immédiatement.
+
+On vérifie cependant après un petit délai.
+*/
+
+setTimeout(
+    initialiseDetector,
+    600
+);
+
+
+/* =============================================
    DÉMARRAGE CAMÉRA
------------------------------------------------- */
+============================================= */
 
 async function startCamera(){
 
@@ -331,26 +529,21 @@ async function startCamera(){
 
     message(
         "Demande caméra…",
-        "Safari doit demander l’autorisation.",
+        "Ouverture de la caméra arrière.",
         "warning"
     );
 
 
     try{
 
-
-        /* Vérification HTTPS */
-
         if(!window.isSecureContext){
 
             throw new Error(
-                "La page n'est pas ouverte en HTTPS."
+                "La page doit être ouverte en HTTPS."
             );
 
         }
 
-
-        /* Vérification API caméra */
 
         if(
             !navigator.mediaDevices ||
@@ -358,15 +551,11 @@ async function startCamera(){
         ){
 
             throw new Error(
-                "Safari ne donne pas accès à l'API caméra."
+                "API caméra indisponible."
             );
 
         }
 
-
-        /* PREMIER ESSAI :
-           caméra arrière
-        */
 
         try{
 
@@ -379,6 +568,14 @@ async function startCamera(){
 
                     facingMode:{
                         exact:"environment"
+                    },
+
+                    width:{
+                        ideal:1280
+                    },
+
+                    height:{
+                        ideal:720
                     }
 
                 }
@@ -387,17 +584,7 @@ async function startCamera(){
 
         }
 
-        catch(firstError){
-
-            console.log(
-                "Caméra arrière exacte indisponible.",
-                firstError
-            );
-
-
-            /* SECOND ESSAI :
-               laisser Safari choisir
-            */
+        catch(error){
 
             stream =
             await navigator.mediaDevices.getUserMedia({
@@ -417,53 +604,77 @@ async function startCamera(){
         }
 
 
-        video.srcObject = stream;
+        video.srcObject =
+        stream;
 
 
         await video.play();
 
 
-        const track =
-        stream.getVideoTracks()[0];
+        /*
+        Attendre que Safari connaisse vraiment
+        la taille du flux vidéo.
+        */
+
+        await new Promise(resolve=>{
+
+            if(video.videoWidth){
+
+                resolve();
+
+                return;
+
+            }
+
+            video.addEventListener(
+                "loadedmetadata",
+                resolve,
+                {
+                    once:true
+                }
+            );
+
+        });
 
 
-        const settings =
-        track.getSettings
-        ? track.getSettings()
-        : {};
+        configureViewer();
 
 
-        message(
-            "Caméra active",
-            "Flux vidéo reçu correctement.",
-            "ok"
+        startButton.classList.add(
+            "hidden"
+        );
+
+        stopButton.classList.remove(
+            "hidden"
         );
 
 
-        diagnostic.innerHTML =
+        detectionRunning = true;
 
-        "CAMÉRA : OK" +
+        totalFrames = 0;
 
-        "<br>" +
-
-        "Résolution : " +
-        (settings.width || "?") +
-        " × " +
-        (settings.height || "?") +
-
-        "<br>" +
-
-        "Facing mode : " +
-        (settings.facingMode || "?") +
-
-        "<br>" +
-
-        "HTTPS : OUI";
+        detectedFrames = 0;
 
 
-        startButton.classList.add("hidden");
+        message(
+            "Recherche AprilTag…",
+            "Présentez un tag36h11 devant la caméra.",
+            "warning"
+        );
 
-        stopButton.classList.remove("hidden");
+
+        if(!detector){
+
+            initialiseDetector();
+
+        }
+
+
+        detectorTimer =
+        setInterval(
+            processFrame,
+            180
+        );
 
     }
 
@@ -472,48 +683,13 @@ async function startCamera(){
         console.error(error);
 
 
-        let explanation =
-        error.name +
-        " — " +
-        error.message;
-
-
-        if(error.name === "NotAllowedError"){
-
-            explanation =
-            "Safari a refusé l'accès à la caméra. Vérifiez l'autorisation caméra du site.";
-
-        }
-
-
-        if(error.name === "NotFoundError"){
-
-            explanation =
-            "Aucune caméra compatible n'a été trouvée.";
-
-        }
-
-
-        if(error.name === "NotReadableError"){
-
-            explanation =
-            "La caméra existe mais Safari ne peut pas l'utiliser actuellement.";
-
-        }
-
-
         message(
             "Échec caméra",
-            explanation,
+            error.name +
+            " — " +
+            error.message,
             "error"
         );
-
-
-        diagnostic.innerHTML =
-        "ERREUR : " +
-        error.name +
-        "<br>" +
-        error.message;
 
 
         startButton.disabled = false;
@@ -523,18 +699,417 @@ async function startCamera(){
 }
 
 
-/* ------------------------------------------------
+/* =============================================
+   CONFIGURATION AFFICHAGE
+============================================= */
+
+function configureViewer(){
+
+    const vw =
+    video.videoWidth;
+
+    const vh =
+    video.videoHeight;
+
+
+    if(!vw || !vh){
+        return;
+    }
+
+
+    /*
+    On adapte le cadre au vrai format caméra.
+    Ainsi le contour AprilTag reste aligné.
+    */
+
+    viewer.style.aspectRatio =
+    vw + "/" + vh;
+
+
+    overlay.width =
+    vw;
+
+    overlay.height =
+    vh;
+
+
+    /*
+    Détection limitée à environ 640 px
+    pour préserver les performances iPad.
+    */
+
+    const maxDimension = 640;
+
+    const factor =
+    Math.min(
+        1,
+        maxDimension /
+        Math.max(vw,vh)
+    );
+
+
+    detectionCanvas.width =
+    Math.round(
+        vw * factor
+    );
+
+    detectionCanvas.height =
+    Math.round(
+        vh * factor
+    );
+
+}
+
+
+/* =============================================
+   ANALYSE D'UNE IMAGE
+============================================= */
+
+function processFrame(){
+
+    if(
+        !detectionRunning ||
+        !detector ||
+        video.readyState < 2
+    ){
+        return;
+    }
+
+
+    try{
+
+        totalFrames++;
+
+
+        detectionCtx.drawImage(
+
+            video,
+
+            0,
+            0,
+
+            detectionCanvas.width,
+            detectionCanvas.height
+
+        );
+
+
+        const tags =
+        detector(
+            detectionCanvas
+        );
+
+
+        drawDetections(tags);
+
+
+        if(tags.length > 0){
+
+            detectedFrames++;
+
+
+            const ids =
+            tags
+            .map(tag=>tag.id)
+            .join(", ");
+
+
+            message(
+
+                "TAG DÉTECTÉ ✓",
+
+                tags.length +
+                " tag(s) — ID : " +
+                ids,
+
+                "ok"
+
+            );
+
+
+            diagnostic.innerHTML =
+
+            "<span class='ok'>" +
+            "APRILTAG DÉTECTÉ" +
+            "</span>" +
+
+            "<br>" +
+
+            "Famille : tag36h11" +
+
+            "<br>" +
+
+            "ID : " +
+            ids +
+
+            "<br>" +
+
+            "Analyse : " +
+            detectionCanvas.width +
+            " × " +
+            detectionCanvas.height +
+
+            "<br>" +
+
+            "Détections : " +
+            detectedFrames;
+
+        }
+
+        else{
+
+            message(
+
+                "Recherche AprilTag…",
+
+                "Aucun tag36h11 détecté.",
+
+                "warning"
+
+            );
+
+
+            diagnostic.innerHTML =
+
+            "<span class='ok'>" +
+            "MOTEUR APRILTAG : ACTIF" +
+            "</span>" +
+
+            "<br>" +
+
+            "Famille : tag36h11" +
+
+            "<br>" +
+
+            "Analyse : " +
+            detectionCanvas.width +
+            " × " +
+            detectionCanvas.height +
+
+            "<br>" +
+
+            "Images analysées : " +
+            totalFrames;
+
+        }
+
+    }
+
+    catch(error){
+
+        console.error(
+            "Erreur détection :",
+            error
+        );
+
+
+        diagnostic.innerHTML =
+
+        "<span class='error'>" +
+        "ERREUR DÉTECTION" +
+        "</span><br>" +
+
+        error.message;
+
+
+        detectionRunning = false;
+
+    }
+
+}
+
+
+/* =============================================
+   DESSIN DES TAGS
+============================================= */
+
+function drawDetections(tags){
+
+    overlayCtx.clearRect(
+        0,
+        0,
+        overlay.width,
+        overlay.height
+    );
+
+
+    if(!tags || !tags.length){
+
+        return;
+
+    }
+
+
+    const scaleX =
+    overlay.width /
+    detectionCanvas.width;
+
+
+    const scaleY =
+    overlay.height /
+    detectionCanvas.height;
+
+
+    tags.forEach(tag=>{
+
+        const points =
+        tag.corners.map(p=>({
+
+            x:p.x * scaleX,
+
+            y:p.y * scaleY
+
+        }));
+
+
+        /* contour */
+
+        overlayCtx.beginPath();
+
+        overlayCtx.moveTo(
+            points[0].x,
+            points[0].y
+        );
+
+
+        for(let i=1;i<4;i++){
+
+            overlayCtx.lineTo(
+                points[i].x,
+                points[i].y
+            );
+
+        }
+
+
+        overlayCtx.closePath();
+
+
+        overlayCtx.lineWidth = 7;
+
+        overlayCtx.strokeStyle =
+        "#39ff74";
+
+        overlayCtx.stroke();
+
+
+        /* centre */
+
+        const cx =
+        (
+            points[0].x +
+            points[1].x +
+            points[2].x +
+            points[3].x
+        ) / 4;
+
+
+        const cy =
+        (
+            points[0].y +
+            points[1].y +
+            points[2].y +
+            points[3].y
+        ) / 4;
+
+
+        overlayCtx.beginPath();
+
+        overlayCtx.arc(
+            cx,
+            cy,
+            9,
+            0,
+            Math.PI * 2
+        );
+
+        overlayCtx.fillStyle =
+        "#ff3b30";
+
+        overlayCtx.fill();
+
+
+        /* ID */
+
+        overlayCtx.font =
+        "bold 34px -apple-system";
+
+        overlayCtx.lineWidth = 7;
+
+        overlayCtx.strokeStyle =
+        "#000";
+
+        overlayCtx.strokeText(
+
+            "ID " + tag.id,
+
+            points[0].x,
+
+            Math.max(
+                40,
+                points[0].y - 15
+            )
+
+        );
+
+
+        overlayCtx.fillStyle =
+        "#39ff74";
+
+        overlayCtx.fillText(
+
+            "ID " + tag.id,
+
+            points[0].x,
+
+            Math.max(
+                40,
+                points[0].y - 15
+            )
+
+        );
+
+    });
+
+}
+
+
+/* =============================================
    ARRÊT
------------------------------------------------- */
+============================================= */
 
 function stopCamera(){
+
+    detectionRunning =
+    false;
+
+
+    if(detectorTimer){
+
+        clearInterval(
+            detectorTimer
+        );
+
+        detectorTimer =
+        null;
+
+    }
+
+
+    overlayCtx.clearRect(
+        0,
+        0,
+        overlay.width,
+        overlay.height
+    );
+
 
     if(stream){
 
         stream
         .getTracks()
         .forEach(
-            track => track.stop()
+            track=>track.stop()
         );
 
     }
@@ -542,14 +1117,20 @@ function stopCamera(){
 
     stream = null;
 
-    video.srcObject = null;
+    video.srcObject =
+    null;
 
 
-    startButton.disabled = false;
+    startButton.disabled =
+    false;
 
-    startButton.classList.remove("hidden");
+    startButton.classList.remove(
+        "hidden"
+    );
 
-    stopButton.classList.add("hidden");
+    stopButton.classList.add(
+        "hidden"
+    );
 
 
     message(
@@ -560,9 +1141,9 @@ function stopCamera(){
 }
 
 
-/* ------------------------------------------------
+/* =============================================
    BOUTONS
------------------------------------------------- */
+============================================= */
 
 startButton.addEventListener(
     "click",
@@ -575,9 +1156,9 @@ stopButton.addEventListener(
 );
 
 
-/* ------------------------------------------------
-   SÉCURITÉ LORSQUE SAFARI QUITTE LA PAGE
------------------------------------------------- */
+/* =============================================
+   FERMETURE SAFARI
+============================================= */
 
 window.addEventListener(
     "pagehide",
