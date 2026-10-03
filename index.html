@@ -11,7 +11,7 @@ user-scalable=no">
 
 <meta name="theme-color" content="#05070a">
 
-<title>AprilTag iPad V5.2</title>
+<title>AprilTag iPad V6</title>
 
 <style>
 
@@ -42,9 +42,9 @@ body{
     max-width:900px;
     margin:auto;
     padding:
-    env(safe-area-inset-top)
-    14px
-    env(safe-area-inset-bottom);
+        env(safe-area-inset-top)
+        14px
+        env(safe-area-inset-bottom);
 }
 
 h1{
@@ -64,12 +64,12 @@ h1{
     aspect-ratio:4/3;
     overflow:hidden;
     border-radius:20px;
-    background:#111;
+    background:#000;
     border:1px solid #ffffff22;
 }
 
 video,
-canvas{
+#overlay{
     position:absolute;
     inset:0;
     width:100%;
@@ -81,7 +81,7 @@ video{
     background:#000;
 }
 
-canvas{
+#overlay{
     z-index:1;
     pointer-events:none;
 }
@@ -89,18 +89,13 @@ canvas{
 .message{
     position:absolute;
     z-index:2;
-
     left:12px;
     right:12px;
     bottom:12px;
-
     padding:14px;
-
     background:#000c;
-
     border-radius:14px;
     border:1px solid #ffffff22;
-
     backdrop-filter:blur(12px);
 }
 
@@ -124,10 +119,8 @@ canvas{
 button{
     flex:1;
     min-height:52px;
-
     border:0;
     border-radius:14px;
-
     font-size:16px;
     font-weight:700;
 }
@@ -149,16 +142,11 @@ button{
 
 .info{
     margin-top:14px;
-
     padding:12px;
-
     border-radius:14px;
-
     background:#11161d;
-
     font-size:13px;
     line-height:1.55;
-
     color:#b8c0cb;
 }
 
@@ -166,16 +154,17 @@ button{
     color:#70e59b;
 }
 
-.error{
-    color:#ff7777;
-}
-
 .warning{
     color:#ffd36b;
 }
 
+.error{
+    color:#ff7777;
+}
+
 </style>
 </head>
+
 
 <body>
 
@@ -184,8 +173,9 @@ button{
 <h1>AprilTag iPad</h1>
 
 <div class="version">
-V5.2 — Détection tag36h11
+V6.0 — AprilTag 36h11 WASM
 </div>
+
 
 <div
     id="viewer"
@@ -205,18 +195,19 @@ V5.2 — Détection tag36h11
         <div
             id="status"
             class="status">
-            Caméra non démarrée
+            Moteur non chargé
         </div>
 
         <div
             id="detail"
             class="detail">
-            Initialisation du moteur AprilTag…
+            Touchez « Démarrer caméra ».
         </div>
 
     </div>
 
 </div>
+
 
 <div class="buttons">
 
@@ -234,20 +225,23 @@ V5.2 — Détection tag36h11
 
 </div>
 
+
 <div
     id="diagnostic"
     class="info">
-    Chargement du moteur AprilTag…
+
+    V6 prête.<br>
+    Le moteur AprilTag sera chargé au démarrage.
+
 </div>
 
 </main>
 
 
-<!-- IMPORTANT :
-     apriltag.js doit être dans le même dossier
-     que index.html
--->
-<script src="apriltag.js"></script>
+<canvas
+    id="analysis"
+    style="display:none">
+</canvas>
 
 
 <script>
@@ -263,6 +257,17 @@ document.getElementById("overlay");
 
 const overlayCtx =
 overlay.getContext("2d");
+
+const analysis =
+document.getElementById("analysis");
+
+const analysisCtx =
+analysis.getContext(
+    "2d",
+    {
+        willReadFrequently:true
+    }
+);
 
 const startButton =
 document.getElementById("start");
@@ -284,395 +289,403 @@ let stream = null;
 
 let detector = null;
 
-let detectionRunning = false;
+let animationId = null;
 
-let detectionTimer = null;
+let grayBuffer = null;
 
-let totalFrames = 0;
-
-let detectedFrames = 0;
+let lastDetectionTime = 0;
 
 
-/* ================================================
-   MESSAGE
-================================================ */
+/* =====================================================
+   AFFICHAGE
+===================================================== */
 
-function message(title,text,type=""){
+function setMessage(
+    title,
+    text,
+    type=""
+){
 
-    status.textContent = title;
+    status.textContent =
+    title;
 
-    detail.textContent = text;
+    detail.textContent =
+    text;
 
     status.className =
-        "status " + type;
+    "status " + type;
+
 }
 
 
-/* ================================================
-   APRILTAG
-================================================ */
+/* =====================================================
+   CHARGEMENT APRILTAG WASM
+===================================================== */
 
-function createAprilTagDetector(){
+async function loadAprilTag(){
 
-    const detections = [];
-
-
-    if(
-        typeof Module === "undefined" ||
-        !Module.cwrap
-    ){
-        throw new Error(
-            "Module AprilTag indisponible."
-        );
+    if(detector){
+        return detector;
     }
 
 
-    if(
-        typeof Runtime === "undefined" ||
-        !Runtime.addFunction
-    ){
-        throw new Error(
-            "Runtime AprilTag indisponible."
-        );
-    }
-
-
-    const detect =
-    Module.cwrap(
-        "detect",
-        "number",
-        [
-            "number",
-            "number",
-            "number",
-            "number"
-        ]
+    setMessage(
+        "Chargement AprilTag…",
+        "Initialisation du moteur WASM.",
+        "warning"
     );
 
 
-    const detected =
-    Runtime.addFunction(function(
+    diagnostic.innerHTML =
+    "Téléchargement du moteur AprilTag 36h11…";
 
-        id,
 
-        x1,y1,
-        x2,y2,
-        x3,y3,
-        x4,y4,
+    return new Promise(
+    function(resolve,reject){
 
-        m00,m01,m02,
-        m10,m11,m12,
-        m20,m21,m22
 
-    ){
+        const base =
+        "https://arenaxr.github.io/apriltag-js-standalone/";
 
-        detections.push({
 
-            id:id,
+        window.AprilTagWasmModule = {
 
-            x1:x1,
-            y1:y1,
+            locateFile:function(path){
 
-            x2:x2,
-            y2:y2,
+                return base + path;
 
-            x3:x3,
-            y3:y3,
+            }
 
-            x4:x4,
-            y4:y4,
+        };
 
-            matrix:[
-                m00,m01,m02,
-                m10,m11,m12,
-                m20,m21,m22
-            ]
 
-        });
+        const script =
+        document.createElement("script");
+
+
+        script.src =
+        base +
+        "apriltag_wasm.js";
+
+
+        script.onload =
+        function(){
+
+
+            try{
+
+
+                function getModulePromise(){
+
+                    const wasm =
+                    window.AprilTagWasm;
+
+
+                    if(
+                        typeof wasm ===
+                        "function"
+                    ){
+
+                        return wasm(
+                            window.AprilTagWasmModule
+                        );
+
+                    }
+
+
+                    if(
+                        wasm &&
+                        typeof wasm.then ===
+                        "function"
+                    ){
+
+                        return wasm;
+
+                    }
+
+
+                    return null;
+
+                }
+
+
+                function initialise(
+                    Module
+                ){
+
+                    try{
+
+
+                        const init =
+                        Module.cwrap(
+                            "atagjs_init",
+                            "number",
+                            []
+                        );
+
+
+                        const options =
+                        Module.cwrap(
+                            "atagjs_set_detector_options",
+                            "number",
+                            [
+                                "number",
+                                "number",
+                                "number",
+                                "number",
+                                "number",
+                                "number",
+                                "number"
+                            ]
+                        );
+
+
+                        const setImage =
+                        Module.cwrap(
+                            "atagjs_set_img_buffer",
+                            "number",
+                            [
+                                "number",
+                                "number",
+                                "number"
+                            ]
+                        );
+
+
+                        const detect =
+                        Module.cwrap(
+                            "atagjs_detect",
+                            "number",
+                            []
+                        );
+
+
+                        init();
+
+
+                        /*
+                        quad decimate = 2
+                        sharpen = 0
+                        threads = 1
+                        */
+
+                        options(
+                            2.0,
+                            0,
+                            1,
+                            1,
+                            0,
+                            0,
+                            0
+                        );
+
+
+                        detector = {
+
+                            detect:
+                            function(
+                                gray,
+                                width,
+                                height
+                            ){
+
+                                const buffer =
+                                setImage(
+                                    width,
+                                    height,
+                                    width
+                                );
+
+
+                                Module
+                                .HEAPU8
+                                .set(
+                                    gray,
+                                    buffer
+                                );
+
+
+                                const ptr =
+                                detect();
+
+
+                                const length =
+                                Module.getValue(
+                                    ptr,
+                                    "i32"
+                                );
+
+
+                                if(
+                                    length === 0
+                                ){
+
+                                    return [];
+
+                                }
+
+
+                                const stringPtr =
+                                Module.getValue(
+                                    ptr + 4,
+                                    "i32"
+                                );
+
+
+                                const bytes =
+                                new Uint8Array(
+
+                                    Module
+                                    .HEAP8
+                                    .buffer,
+
+                                    stringPtr,
+
+                                    length
+                                );
+
+
+                                let json = "";
+
+
+                                for(
+                                    let i=0;
+                                    i<length;
+                                    i++
+                                ){
+
+                                    json +=
+                                    String.fromCharCode(
+                                        bytes[i]
+                                    );
+
+                                }
+
+
+                                return JSON.parse(
+                                    json
+                                );
+
+                            }
+
+                        };
+
+
+                        diagnostic.innerHTML =
+
+                        "<span class='ok'>" +
+                        "MOTEUR APRILTAG : PRÊT" +
+                        "</span>" +
+
+                        "<br>" +
+
+                        "Famille : tag36h11" +
+
+                        "<br>" +
+
+                        "WebAssembly : chargé";
+
+
+                        resolve(
+                            detector
+                        );
+
+
+                    }
+
+                    catch(error){
+
+                        reject(
+                            error
+                        );
+
+                    }
+
+                }
+
+
+                const promise =
+                getModulePromise();
+
+
+                if(promise){
+
+                    promise
+                    .then(initialise)
+                    .catch(reject);
+
+                }
+
+                else{
+
+                    setTimeout(
+                    function(){
+
+                        const delayed =
+                        getModulePromise();
+
+
+                        if(delayed){
+
+                            delayed
+                            .then(initialise)
+                            .catch(reject);
+
+                        }
+
+                        else{
+
+                            reject(
+                                new Error(
+                                    "Module WASM introuvable."
+                                )
+                            );
+
+                        }
+
+                    },
+                    200
+                    );
+
+                }
+
+            }
+
+            catch(error){
+
+                reject(
+                    error
+                );
+
+            }
+
+        };
+
+
+        script.onerror =
+        function(){
+
+            reject(
+                new Error(
+                    "Impossible de télécharger apriltag_wasm.js"
+                )
+            );
+
+        };
+
+
+        document.head.appendChild(
+            script
+        );
 
     });
 
-
-    return function(source){
-
-        let sourceWidth =
-        source.videoWidth ||
-        source.width;
-
-        let sourceHeight =
-        source.videoHeight ||
-        source.height;
-
-
-        if(
-            !sourceWidth ||
-            !sourceHeight
-        ){
-            return [];
-        }
-
-
-        /*
-        Limite volontaire à 800 px,
-        comme dans l'exemple d'origine
-        du moteur Emscripten.
-        */
-
-        let downscale = 1;
-
-
-        if(sourceWidth > 800){
-
-            downscale =
-            sourceWidth / 800;
-
-        }
-
-
-        if(sourceHeight > 800){
-
-            downscale =
-            Math.max(
-                sourceHeight / 800,
-                downscale
-            );
-
-        }
-
-
-        const width =
-        Math.floor(
-            sourceWidth / downscale
-        );
-
-
-        const height =
-        Math.floor(
-            sourceHeight / downscale
-        );
-
-
-        detectionCanvas.width =
-        width;
-
-        detectionCanvas.height =
-        height;
-
-
-        detectionCtx.drawImage(
-
-            source,
-
-            0,
-            0,
-
-            width,
-            height
-
-        );
-
-
-        const imageData =
-        detectionCtx.getImageData(
-
-            0,
-            0,
-
-            width,
-            height
-
-        );
-
-
-        const buffer =
-        Module._malloc(
-            imageData.data.length *
-            imageData.data.BYTES_PER_ELEMENT
-        );
-
-
-        Module.HEAPU8.set(
-            imageData.data,
-            buffer
-        );
-
-
-        detections.length = 0;
-
-
-        detect(
-            detected,
-            width,
-            height,
-            buffer
-        );
-
-
-        Module._free(buffer);
-
-
-        return {
-            detections:
-            detections.slice(),
-
-            width:
-            width,
-
-            height:
-            height
-        };
-
-    };
-
 }
 
 
-/* ================================================
-   CANVAS DE CALCUL
-================================================ */
-
-const detectionCanvas =
-document.createElement("canvas");
-
-const detectionCtx =
-detectionCanvas.getContext(
-    "2d",
-    {
-        willReadFrequently:true
-    }
-);
-
-
-/* ================================================
-   INITIALISATION APRILTAG
-================================================ */
-
-function initialiseDetector(){
-
-    try{
-
-        detector =
-        createAprilTagDetector();
-
-
-        diagnostic.innerHTML =
-
-        "<span class='ok'>" +
-        "MOTEUR APRILTAG : PRÊT" +
-        "</span>" +
-
-        "<br>" +
-
-        "Famille : tag36h11" +
-
-        "<br>" +
-
-        "apriltag.js : chargé localement";
-
-
-        message(
-            "Moteur prêt",
-            "Vous pouvez démarrer la caméra.",
-            "ok"
-        );
-
-    }
-
-    catch(error){
-
-        console.error(error);
-
-
-        detector = null;
-
-
-        diagnostic.innerHTML =
-
-        "<span class='error'>" +
-        "MOTEUR APRILTAG : ERREUR" +
-        "</span>" +
-
-        "<br>" +
-
-        error.message;
-
-
-        message(
-            "Erreur AprilTag",
-            error.message,
-            "error"
-        );
-
-    }
-
-}
-
-
-/*
-L'ancien moteur Emscripten peut demander
-un court délai avant d'être complètement
-initialisé.
-*/
-
-function waitForAprilTag(attempt=0){
-
-    if(
-        typeof Module !== "undefined" &&
-        Module.cwrap &&
-        typeof Runtime !== "undefined" &&
-        Runtime.addFunction
-    ){
-
-        initialiseDetector();
-
-        return;
-    }
-
-
-    if(attempt > 40){
-
-        diagnostic.innerHTML =
-
-        "<span class='error'>" +
-        "MOTEUR APRILTAG : NON CHARGÉ" +
-        "</span>" +
-
-        "<br>" +
-
-        "Vérifiez que apriltag.js se trouve " +
-        "dans le même dossier que index.html.";
-
-
-        message(
-            "AprilTag indisponible",
-            "apriltag.js n'a pas pu être chargé.",
-            "error"
-        );
-
-        return;
-    }
-
-
-    setTimeout(
-        function(){
-
-            waitForAprilTag(
-                attempt + 1
-            );
-
-        },
-        250
-    );
-
-}
-
-
-waitForAprilTag();
-
-
-/* ================================================
-   DÉMARRAGE CAMÉRA
-================================================ */
+/* =====================================================
+   CAMÉRA
+===================================================== */
 
 async function startCamera(){
 
@@ -680,19 +693,15 @@ async function startCamera(){
     true;
 
 
-    message(
-        "Demande caméra…",
-        "Ouverture de la caméra arrière.",
-        "warning"
-    );
-
-
     try{
 
-        if(!window.isSecureContext){
+
+        if(
+            !window.isSecureContext
+        ){
 
             throw new Error(
-                "La page doit être ouverte en HTTPS."
+                "Cette page doit être ouverte en HTTPS."
             );
 
         }
@@ -704,57 +713,46 @@ async function startCamera(){
         ){
 
             throw new Error(
-                "API caméra indisponible."
+                "API caméra non disponible."
             );
 
         }
 
 
-        try{
+        await loadAprilTag();
 
-            stream =
-            await navigator.mediaDevices.getUserMedia({
 
-                audio:false,
+        setMessage(
+            "Ouverture caméra…",
+            "Activation de la caméra arrière.",
+            "warning"
+        );
 
-                video:{
 
-                    facingMode:{
-                        exact:"environment"
-                    },
+        stream =
+        await navigator
+        .mediaDevices
+        .getUserMedia({
 
-                    width:{
-                        ideal:1280
-                    },
+            audio:false,
 
-                    height:{
-                        ideal:720
-                    }
+            video:{
 
+                facingMode:{
+                    ideal:"environment"
+                },
+
+                width:{
+                    ideal:1280
+                },
+
+                height:{
+                    ideal:720
                 }
 
-            });
+            }
 
-        }
-
-        catch(error){
-
-            stream =
-            await navigator.mediaDevices.getUserMedia({
-
-                audio:false,
-
-                video:{
-
-                    facingMode:{
-                        ideal:"environment"
-                    }
-
-                }
-
-            });
-
-        }
+        });
 
 
         video.srcObject =
@@ -764,81 +762,61 @@ async function startCamera(){
         await video.play();
 
 
-        if(!video.videoWidth){
-
-            await new Promise(resolve=>{
-
-                video.addEventListener(
-                    "loadedmetadata",
-                    resolve,
-                    {
-                        once:true
-                    }
-                );
-
-            });
-
-        }
+        await waitForVideo();
 
 
-        configureViewer();
+        configureCanvas();
 
 
-        startButton.classList.add(
-            "hidden"
-        );
-
-        stopButton.classList.remove(
+        startButton
+        .classList
+        .add(
             "hidden"
         );
 
 
-        detectionRunning =
-        true;
+        stopButton
+        .classList
+        .remove(
+            "hidden"
+        );
 
 
-        totalFrames =
-        0;
-
-
-        detectedFrames =
-        0;
-
-
-        message(
+        setMessage(
             "Recherche AprilTag…",
             "Présentez un tag36h11 devant la caméra.",
             "warning"
         );
 
 
-        if(!detector){
-
-            initialiseDetector();
-
-        }
-
-
-        detectionTimer =
-        setInterval(
-            processFrame,
-            180
+        animationId =
+        requestAnimationFrame(
+            scanFrame
         );
 
     }
 
     catch(error){
 
-        console.error(error);
+
+        console.error(
+            error
+        );
 
 
-        message(
-            "Échec caméra",
-            error.name +
-            " — " +
+        setMessage(
+            "Erreur",
             error.message,
             "error"
         );
+
+
+        diagnostic.innerHTML =
+
+        "<span class='error'>" +
+        "ERREUR : " +
+        error.message +
+        "</span>";
 
 
         startButton.disabled =
@@ -849,11 +827,45 @@ async function startCamera(){
 }
 
 
-/* ================================================
-   DIMENSIONS
-================================================ */
+/* =====================================================
+   ATTENTE MÉTADONNÉES VIDÉO
+===================================================== */
 
-function configureViewer(){
+function waitForVideo(){
+
+    return new Promise(
+    function(resolve){
+
+
+        if(
+            video.videoWidth > 0
+        ){
+
+            resolve();
+
+            return;
+
+        }
+
+
+        video.addEventListener(
+            "loadedmetadata",
+            resolve,
+            {
+                once:true
+            }
+        );
+
+    });
+
+}
+
+
+/* =====================================================
+   DIMENSIONS
+===================================================== */
+
+function configureCanvas(){
 
     const width =
     video.videoWidth;
@@ -862,77 +874,245 @@ function configureViewer(){
     video.videoHeight;
 
 
-    if(
-        !width ||
-        !height
-    ){
-        return;
-    }
-
-
     viewer.style.aspectRatio =
     width + "/" + height;
 
 
+    /*
+    Résolution limitée volontairement
+    pour préserver les performances iPad.
+    */
+
+    const maximum =
+    800;
+
+
+    const factor =
+    Math.min(
+        1,
+        maximum /
+        Math.max(
+            width,
+            height
+        )
+    );
+
+
+    analysis.width =
+    Math.round(
+        width * factor
+    );
+
+
+    analysis.height =
+    Math.round(
+        height * factor
+    );
+
+
     overlay.width =
-    width;
+    analysis.width;
 
 
     overlay.height =
-    height;
+    analysis.height;
+
+
+    grayBuffer =
+    new Uint8Array(
+        analysis.width *
+        analysis.height
+    );
+
+
+    diagnostic.innerHTML =
+
+    "<span class='ok'>" +
+    "MOTEUR APRILTAG : PRÊT" +
+    "</span>" +
+
+    "<br>" +
+
+    "Famille : tag36h11" +
+
+    "<br>" +
+
+    "Caméra : " +
+    width +
+    " × " +
+    height +
+
+    "<br>" +
+
+    "Analyse : " +
+    analysis.width +
+    " × " +
+    analysis.height;
 
 }
 
 
-/* ================================================
-   ANALYSE
-================================================ */
+/* =====================================================
+   CONVERSION GRIS
+===================================================== */
 
-function processFrame(){
+function imageToGray(
+    imageData
+){
+
+    const data =
+    imageData.data;
+
+
+    let destinationIndex =
+    0;
+
+
+    for(
+        let sourceIndex=0;
+        sourceIndex<data.length;
+        sourceIndex+=4
+    ){
+
+        const r =
+        data[sourceIndex];
+
+        const g =
+        data[sourceIndex+1];
+
+        const b =
+        data[sourceIndex+2];
+
+
+        grayBuffer[
+            destinationIndex
+        ] =
+        (
+            r +
+            g +
+            b
+        ) / 3;
+
+
+        destinationIndex++;
+
+    }
+
+}
+
+
+/* =====================================================
+   BOUCLE DE DÉTECTION
+===================================================== */
+
+function scanFrame(
+    timestamp
+){
+
+    animationId =
+    requestAnimationFrame(
+        scanFrame
+    );
+
 
     if(
-        !detectionRunning ||
+        !stream ||
         !detector ||
         video.readyState < 2
     ){
+
         return;
+
     }
+
+
+    /*
+    environ 10 analyses par seconde
+    */
+
+    if(
+        timestamp -
+        lastDetectionTime <
+        100
+    ){
+
+        return;
+
+    }
+
+
+    lastDetectionTime =
+    timestamp;
 
 
     try{
 
-        totalFrames++;
 
+        analysisCtx
+        .drawImage(
 
-        const result =
-        detector(video);
+            video,
 
+            0,
+            0,
 
-        const tags =
-        result.detections;
+            analysis.width,
+            analysis.height
 
-
-        drawDetections(
-            tags,
-            result.width,
-            result.height
         );
 
 
-        if(tags.length > 0){
+        const imageData =
+        analysisCtx
+        .getImageData(
 
-            detectedFrames++;
+            0,
+            0,
+
+            analysis.width,
+            analysis.height
+
+        );
+
+
+        imageToGray(
+            imageData
+        );
+
+
+        const markers =
+        detector.detect(
+
+            grayBuffer,
+
+            analysis.width,
+
+            analysis.height
+
+        );
+
+
+        drawMarkers(
+            markers
+        );
+
+
+        if(
+            markers &&
+            markers.length > 0
+        ){
 
 
             const ids =
-            tags
+            markers
             .map(
-                tag => tag.id
+                marker =>
+                marker.id
             )
             .join(", ");
 
 
-            message(
+            setMessage(
                 "TAG DÉTECTÉ ✓",
                 "ID : " + ids,
                 "ok"
@@ -956,53 +1136,19 @@ function processFrame(){
 
             "<br>" +
 
-            "Résolution analyse : " +
-            result.width +
-            " × " +
-            result.height +
-
-            "<br>" +
-
-            "Images analysées : " +
-            totalFrames +
-
-            "<br>" +
-
-            "Images avec détection : " +
-            detectedFrames;
+            "Nombre : " +
+            markers.length;
 
         }
 
         else{
 
-            message(
+
+            setMessage(
                 "Recherche AprilTag…",
                 "Aucun tag36h11 détecté.",
                 "warning"
             );
-
-
-            diagnostic.innerHTML =
-
-            "<span class='ok'>" +
-            "MOTEUR APRILTAG : ACTIF" +
-            "</span>" +
-
-            "<br>" +
-
-            "Famille : tag36h11" +
-
-            "<br>" +
-
-            "Résolution analyse : " +
-            result.width +
-            " × " +
-            result.height +
-
-            "<br>" +
-
-            "Images analysées : " +
-            totalFrames;
 
         }
 
@@ -1010,13 +1156,13 @@ function processFrame(){
 
     catch(error){
 
+
         console.error(
-            "Erreur détection",
             error
         );
 
 
-        message(
+        setMessage(
             "Erreur détection",
             error.message,
             "error"
@@ -1026,30 +1172,21 @@ function processFrame(){
         diagnostic.innerHTML =
 
         "<span class='error'>" +
-        "ERREUR DÉTECTION" +
-        "</span>" +
-
-        "<br>" +
-
-        error.message;
-
-
-        detectionRunning =
-        false;
+        "ERREUR DÉTECTION : " +
+        error.message +
+        "</span>";
 
     }
 
 }
 
 
-/* ================================================
-   DESSIN
-================================================ */
+/* =====================================================
+   DESSIN DES TAGS
+===================================================== */
 
-function drawDetections(
-    tags,
-    detectionWidth,
-    detectionHeight
+function drawMarkers(
+    markers
 ){
 
     overlayCtx.clearRect(
@@ -1061,57 +1198,45 @@ function drawDetections(
 
 
     if(
-        !tags ||
-        tags.length === 0
+        !markers ||
+        markers.length === 0
     ){
+
         return;
+
     }
 
 
-    const scaleX =
-    overlay.width /
-    detectionWidth;
+    markers.forEach(
+    function(marker){
 
 
-    const scaleY =
-    overlay.height /
-    detectionHeight;
+        const corners =
+        marker.corners;
 
 
-    tags.forEach(tag=>{
+        if(
+            !corners ||
+            corners.length < 4
+        ){
+
+            return;
+
+        }
 
 
-        const points = [
+        /*
+        contour
+        */
 
-            {
-                x:tag.x1 * scaleX,
-                y:tag.y1 * scaleY
-            },
-
-            {
-                x:tag.x2 * scaleX,
-                y:tag.y2 * scaleY
-            },
-
-            {
-                x:tag.x3 * scaleX,
-                y:tag.y3 * scaleY
-            },
-
-            {
-                x:tag.x4 * scaleX,
-                y:tag.y4 * scaleY
-            }
-
-        ];
+        overlayCtx
+        .beginPath();
 
 
-        overlayCtx.beginPath();
-
-
-        overlayCtx.moveTo(
-            points[0].x,
-            points[0].y
+        overlayCtx
+        .moveTo(
+            corners[0].x,
+            corners[0].y
         );
 
 
@@ -1121,105 +1246,139 @@ function drawDetections(
             i++
         ){
 
-            overlayCtx.lineTo(
-                points[i].x,
-                points[i].y
+            overlayCtx
+            .lineTo(
+                corners[i].x,
+                corners[i].y
             );
 
         }
 
 
-        overlayCtx.closePath();
+        overlayCtx
+        .closePath();
 
 
-        overlayCtx.lineWidth =
-        6;
+        overlayCtx
+        .lineWidth =
+        5;
 
 
-        overlayCtx.strokeStyle =
+        overlayCtx
+        .strokeStyle =
         "#39ff74";
 
 
-        overlayCtx.stroke();
+        overlayCtx
+        .stroke();
 
+
+        /*
+        centre
+        */
 
         const centerX =
         (
-            points[0].x +
-            points[1].x +
-            points[2].x +
-            points[3].x
+            corners[0].x +
+            corners[1].x +
+            corners[2].x +
+            corners[3].x
         ) / 4;
 
 
         const centerY =
         (
-            points[0].y +
-            points[1].y +
-            points[2].y +
-            points[3].y
+            corners[0].y +
+            corners[1].y +
+            corners[2].y +
+            corners[3].y
         ) / 4;
 
 
-        overlayCtx.beginPath();
+        overlayCtx
+        .beginPath();
 
 
-        overlayCtx.arc(
+        overlayCtx
+        .arc(
             centerX,
             centerY,
-            8,
+            7,
             0,
-            Math.PI * 2
+            Math.PI*2
         );
 
 
-        overlayCtx.fillStyle =
+        overlayCtx
+        .fillStyle =
         "#ff3b30";
 
 
-        overlayCtx.fill();
+        overlayCtx
+        .fill();
 
+
+        /*
+        ID
+        */
 
         overlayCtx.font =
-        "bold 34px -apple-system";
+        "bold 24px -apple-system";
 
 
-        overlayCtx.lineWidth =
-        7;
+        const label =
+        "ID " +
+        marker.id;
 
 
-        overlayCtx.strokeStyle =
-        "#000";
+        const metrics =
+        overlayCtx
+        .measureText(
+            label
+        );
 
 
-        overlayCtx.strokeText(
+        overlayCtx
+        .fillStyle =
+        "rgba(0,0,0,.75)";
 
-            "ID " + tag.id,
 
-            points[0].x,
+        overlayCtx
+        .fillRect(
 
-            Math.max(
-                40,
-                points[0].y - 15
-            )
+            centerX -
+            metrics.width/2 -
+            6,
+
+            centerY -
+            20,
+
+            metrics.width +
+            12,
+
+            30
 
         );
 
 
-        overlayCtx.fillStyle =
+        overlayCtx
+        .fillStyle =
         "#39ff74";
 
 
-        overlayCtx.fillText(
+        overlayCtx
+        .textAlign =
+        "center";
 
-            "ID " + tag.id,
 
-            points[0].x,
+        overlayCtx
+        .fillText(
 
-            Math.max(
-                40,
-                points[0].y - 15
-            )
+            label,
+
+            centerX,
+
+            centerY + 4
 
         );
 
@@ -1228,43 +1387,38 @@ function drawDetections(
 }
 
 
-/* ================================================
+/* =====================================================
    ARRÊT
-================================================ */
+===================================================== */
 
 function stopCamera(){
 
-    detectionRunning =
-    false;
+    if(
+        animationId
+    ){
 
-
-    if(detectionTimer){
-
-        clearInterval(
-            detectionTimer
+        cancelAnimationFrame(
+            animationId
         );
 
-
-        detectionTimer =
+        animationId =
         null;
 
     }
 
 
-    overlayCtx.clearRect(
-        0,
-        0,
-        overlay.width,
-        overlay.height
-    );
-
-
-    if(stream){
+    if(
+        stream
+    ){
 
         stream
         .getTracks()
         .forEach(
-            track => track.stop()
+            function(track){
+
+                track.stop();
+
+            }
         );
 
     }
@@ -1278,21 +1432,33 @@ function stopCamera(){
     null;
 
 
+    overlayCtx.clearRect(
+        0,
+        0,
+        overlay.width,
+        overlay.height
+    );
+
+
     startButton.disabled =
     false;
 
 
-    startButton.classList.remove(
+    startButton
+    .classList
+    .remove(
         "hidden"
     );
 
 
-    stopButton.classList.add(
+    stopButton
+    .classList
+    .add(
         "hidden"
     );
 
 
-    message(
+    setMessage(
         "Caméra arrêtée",
         "Touchez Démarrer caméra pour reprendre."
     );
@@ -1300,9 +1466,9 @@ function stopCamera(){
 }
 
 
-/* ================================================
+/* =====================================================
    BOUTONS
-================================================ */
+===================================================== */
 
 startButton.addEventListener(
     "click",
@@ -1315,10 +1481,6 @@ stopButton.addEventListener(
     stopCamera
 );
 
-
-/* ================================================
-   SAFARI QUITTE LA PAGE
-================================================ */
 
 window.addEventListener(
     "pagehide",
