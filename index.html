@@ -1,55 +1,30 @@
 <!doctype html>
 <html lang="fr">
-
 <head>
 <meta charset="utf-8">
-
-<meta
-    name="viewport"
-    content="width=device-width,
-             initial-scale=1,
-             viewport-fit=cover,
-             user-scalable=no"
->
-
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#05070a">
-
-<title>AprilTag iPad V6.1</title>
+<title>AprilTag iPad V6.2</title>
 
 <style>
+* { box-sizing: border-box; }
 
-* {
-    box-sizing: border-box;
-}
-
-html,
-body {
+html, body {
     margin: 0;
     width: 100%;
     min-height: 100%;
     background: #05070a;
     color: white;
-    font-family:
-        -apple-system,
-        BlinkMacSystemFont,
-        "SF Pro Display",
-        system-ui,
-        sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
 }
 
-body {
-    min-height: 100svh;
-}
+body { min-height: 100svh; }
 
 .app {
     width: 100%;
     max-width: 900px;
     margin: auto;
-
-    padding:
-        env(safe-area-inset-top)
-        14px
-        env(safe-area-inset-bottom);
+    padding: env(safe-area-inset-top) 14px env(safe-area-inset-bottom);
 }
 
 h1 {
@@ -67,21 +42,15 @@ h1 {
     position: relative;
     width: 100%;
     aspect-ratio: 4 / 3;
-
     overflow: hidden;
-
     border-radius: 20px;
     background: #000;
-
     border: 1px solid #ffffff22;
 }
 
-video,
-#overlay {
+video, #overlay {
     position: absolute;
-
     inset: 0;
-
     width: 100%;
     height: 100%;
 }
@@ -98,21 +67,14 @@ video {
 
 .message {
     position: absolute;
-
     z-index: 2;
-
     left: 12px;
     right: 12px;
     bottom: 12px;
-
     padding: 14px;
-
     background: #000c;
-
     border-radius: 14px;
-
     border: 1px solid #ffffff22;
-
     backdrop-filter: blur(12px);
 }
 
@@ -123,11 +85,8 @@ video {
 
 .detail {
     margin-top: 5px;
-
     font-size: 13px;
-
     color: #b6bec8;
-
     overflow-wrap: anywhere;
 }
 
@@ -139,12 +98,9 @@ video {
 
 button {
     flex: 1;
-
     min-height: 52px;
-
     border: 0;
     border-radius: 14px;
-
     font-size: 16px;
     font-weight: 700;
 }
@@ -160,58 +116,61 @@ button {
     border: 1px solid #ffffff22;
 }
 
-.hidden {
-    display: none;
-}
+.hidden { display: none; }
 
 .info {
     margin-top: 14px;
-
     padding: 12px;
-
     border-radius: 14px;
-
     background: #11161d;
-
     font-size: 13px;
     line-height: 1.55;
-
     color: #b8c0cb;
-
     overflow-wrap: anywhere;
 }
 
-.ok {
-    color: #70e59b;
+.pose-grid {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
 }
 
-.warning {
-    color: #ffd36b;
+.pose-box {
+    padding: 10px;
+    border-radius: 12px;
+    background: #0b1016;
+    border: 1px solid #ffffff14;
+    text-align: center;
 }
 
-.error {
-    color: #ff7777;
+.pose-label {
+    font-size: 11px;
+    color: #8f98a5;
 }
 
+.pose-value {
+    margin-top: 3px;
+    font-size: 17px;
+    font-weight: 750;
+}
+
+.ok { color: #70e59b; }
+.warning { color: #ffd36b; }
+.error { color: #ff7777; }
 </style>
 </head>
 
-
 <body>
-
 <main class="app">
 
     <h1>AprilTag iPad</h1>
 
     <div class="version">
-        V6.1 — tag36h11 — test détection
+        V6.2 — tag36h11 — pose 3D multi-tags
     </div>
 
-
-    <div
-        id="viewer"
-        class="viewer"
-    >
+    <div id="viewer" class="viewer">
 
         <video
             id="camera"
@@ -222,27 +181,13 @@ button {
 
         <canvas id="overlay"></canvas>
 
-
         <div class="message">
-
-            <div
-                id="status"
-                class="status"
-            >
-                Prêt
-            </div>
-
-            <div
-                id="detail"
-                class="detail"
-            >
+            <div id="status" class="status">Prêt</div>
+            <div id="detail" class="detail">
                 Touchez « Démarrer caméra ».
             </div>
-
         </div>
-
     </div>
-
 
     <div class="buttons">
 
@@ -259,30 +204,60 @@ button {
         >
             Arrêter
         </button>
-
     </div>
 
+    <div id="diagnostic" class="info">
+        V6.2 prête.<br>
+        Détection + estimation de pose 3D AprilTag.
+    </div>
 
-    <div
-        id="diagnostic"
-        class="info"
-    >
-        V6.1 prête.<br>
-        Caméra + moteur AprilTag 36h11.
+    <div class="pose-grid">
+        <div class="pose-box">
+            <div class="pose-label">X cube</div>
+            <div id="poseX" class="pose-value">—</div>
+        </div>
+        <div class="pose-box">
+            <div class="pose-label">Y cube</div>
+            <div id="poseY" class="pose-value">—</div>
+        </div>
+        <div class="pose-box">
+            <div class="pose-label">Z / distance</div>
+            <div id="poseZ" class="pose-value">—</div>
+        </div>
     </div>
 
 </main>
-
 
 <canvas
     id="analysis"
     style="display:none"
 ></canvas>
 
-
 <script>
-
 "use strict";
+
+/* ============================================================
+   CONFIGURATION V6.2
+
+   IMPORTANT :
+   Valeurs provisoires à confirmer physiquement.
+   - Tag : 40 mm
+   - Cube : 50 mm
+   - HFOV caméra : 65°
+============================================================ */
+
+const TAG_SIZE_M = 0.040;
+const CUBE_EDGE_M = 0.050;
+const CAMERA_HFOV_DEG = 65;
+
+/*
+  Les IDs du cube sont supposés avoir tous la même taille.
+  tag36h11 possède 587 IDs (0 à 586).
+*/
+const MAX_TAG_ID_TO_CONFIGURE = 586;
+
+/* Lissage du centre du cube */
+const CENTER_SMOOTHING_ALPHA = 0.25;
 
 
 /* ============================================================
@@ -290,42 +265,51 @@ button {
 ============================================================ */
 
 const video =
-document.getElementById("camera");
+    document.getElementById("camera");
 
 const viewer =
-document.getElementById("viewer");
+    document.getElementById("viewer");
 
 const overlay =
-document.getElementById("overlay");
+    document.getElementById("overlay");
 
 const overlayCtx =
-overlay.getContext("2d");
+    overlay.getContext("2d");
 
 const analysis =
-document.getElementById("analysis");
+    document.getElementById("analysis");
 
 const analysisCtx =
-analysis.getContext(
-    "2d",
-    {
-        willReadFrequently: true
-    }
-);
+    analysis.getContext(
+        "2d",
+        {
+            willReadFrequently: true
+        }
+    );
 
 const startButton =
-document.getElementById("start");
+    document.getElementById("start");
 
 const stopButton =
-document.getElementById("stop");
+    document.getElementById("stop");
 
 const status =
-document.getElementById("status");
+    document.getElementById("status");
 
 const detail =
-document.getElementById("detail");
+    document.getElementById("detail");
 
 const diagnostic =
-document.getElementById("diagnostic");
+    document.getElementById("diagnostic");
+
+const poseX =
+    document.getElementById("poseX");
+
+const poseY =
+    document.getElementById("poseY");
+
+const poseZ =
+    document.getElementById("poseZ");
 
 
 /* ============================================================
@@ -333,20 +317,21 @@ document.getElementById("diagnostic");
 ============================================================ */
 
 let stream = null;
-
 let detector = null;
-
 let animationId = null;
-
 let grayBuffer = null;
-
 let lastDetectionTime = 0;
-
 let detectionRunning = false;
+
+let cameraModel = null;
+
+let smoothedCubeCenter = null;
+let previousCubeCenter = null;
+let stabilityMm = null;
 
 
 /* ============================================================
-   MESSAGES
+   OUTILS UI
 ============================================================ */
 
 function setMessage(
@@ -354,15 +339,9 @@ function setMessage(
     text,
     type = ""
 ) {
-
-    status.textContent =
-        title;
-
-    detail.textContent =
-        text;
-
-    status.className =
-        "status " + type;
+    status.textContent = title;
+    detail.textContent = text;
+    status.className = "status " + type;
 }
 
 
@@ -376,31 +355,149 @@ function errorText(error) {
         return "Erreur JavaScript : valeur null";
     }
 
-    if (
-        typeof error === "string"
-    ) {
+    if (typeof error === "string") {
         return error;
     }
 
-    if (
-        error.message
-    ) {
+    if (error.message) {
         return error.message;
     }
 
     try {
-
-        return JSON.stringify(
-            error
-        );
-
+        return JSON.stringify(error);
     }
     catch (_) {
-
-        return String(
-            error
-        );
+        return String(error);
     }
+}
+
+
+function escapeHtml(value) {
+
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+
+/* ============================================================
+   PETITS OUTILS 3D
+============================================================ */
+
+function vecAdd(a, b) {
+    return [
+        a[0] + b[0],
+        a[1] + b[1],
+        a[2] + b[2]
+    ];
+}
+
+
+function vecSub(a, b) {
+    return [
+        a[0] - b[0],
+        a[1] - b[1],
+        a[2] - b[2]
+    ];
+}
+
+
+function vecScale(v, s) {
+    return [
+        v[0] * s,
+        v[1] * s,
+        v[2] * s
+    ];
+}
+
+
+function vecLength(v) {
+    return Math.hypot(
+        v[0],
+        v[1],
+        v[2]
+    );
+}
+
+
+function vecNormalize(v) {
+
+    const length =
+        vecLength(v);
+
+    if (!Number.isFinite(length) || length < 1e-9) {
+        return [0, 0, 1];
+    }
+
+    return vecScale(
+        v,
+        1 / length
+    );
+}
+
+
+function lerpVec(a, b, alpha) {
+
+    return [
+        a[0] + (b[0] - a[0]) * alpha,
+        a[1] + (b[1] - a[1]) * alpha,
+        a[2] + (b[2] - a[2]) * alpha
+    ];
+}
+
+
+function project3D(point) {
+
+    if (
+        !cameraModel ||
+        !point ||
+        !Number.isFinite(point[2]) ||
+        point[2] <= 0.0001
+    ) {
+        return null;
+    }
+
+    return {
+        x:
+            cameraModel.fx *
+            point[0] /
+            point[2] +
+            cameraModel.cx,
+
+        y:
+            cameraModel.fy *
+            point[1] /
+            point[2] +
+            cameraModel.cy
+    };
+}
+
+
+/*
+  Le JSON du moteur WASM indique R en "column major".
+  R[0], R[1], R[2] sont donc traités ici
+  comme les axes locaux X, Y, Z du tag exprimés
+  dans le repère caméra.
+*/
+function poseAxes(marker) {
+
+    if (
+        !marker ||
+        !marker.pose ||
+        !Array.isArray(marker.pose.R) ||
+        marker.pose.R.length < 3
+    ) {
+        return null;
+    }
+
+    return {
+        x: vecNormalize(marker.pose.R[0]),
+        y: vecNormalize(marker.pose.R[1]),
+        z: vecNormalize(marker.pose.R[2])
+    };
 }
 
 
@@ -411,10 +508,8 @@ function errorText(error) {
 async function loadAprilTag() {
 
     if (detector) {
-
         return detector;
     }
-
 
     setMessage(
         "Chargement AprilTag…",
@@ -422,10 +517,8 @@ async function loadAprilTag() {
         "warning"
     );
 
-
     diagnostic.innerHTML =
         "Téléchargement du moteur AprilTag…";
-
 
     return new Promise(
         function(resolve, reject) {
@@ -433,28 +526,22 @@ async function loadAprilTag() {
             const base =
                 "https://arenaxr.github.io/apriltag-js-standalone/";
 
-
             window.AprilTagWasmModule = {
 
                 locateFile:
                 function(path) {
-
                     return base + path;
                 }
-
             };
-
 
             const script =
                 document.createElement(
                     "script"
                 );
 
-
             script.src =
                 base +
                 "apriltag_wasm.js";
-
 
             script.onload =
             function() {
@@ -466,56 +553,45 @@ async function loadAprilTag() {
                         const wasm =
                             window.AprilTagWasm;
 
-
                         if (
                             typeof wasm ===
                             "function"
                         ) {
-
                             return wasm(
                                 window.AprilTagWasmModule
                             );
                         }
-
 
                         if (
                             wasm &&
                             typeof wasm.then ===
                             "function"
                         ) {
-
                             return wasm;
                         }
-
 
                         return null;
                     }
 
 
-                    function initialise(
-                        Module
-                    ) {
+                    function initialise(Module) {
 
                         try {
 
                             if (!Module) {
-
                                 throw new Error(
                                     "Module WebAssembly vide."
                                 );
                             }
 
-
                             if (
                                 typeof Module.cwrap !==
                                 "function"
                             ) {
-
                                 throw new Error(
                                     "Module.cwrap indisponible."
                                 );
                             }
-
 
                             const init =
                                 Module.cwrap(
@@ -523,7 +599,6 @@ async function loadAprilTag() {
                                     "number",
                                     []
                                 );
-
 
                             const options =
                                 Module.cwrap(
@@ -540,7 +615,6 @@ async function loadAprilTag() {
                                     ]
                                 );
 
-
                             const setImage =
                                 Module.cwrap(
                                     "atagjs_set_img_buffer",
@@ -552,6 +626,27 @@ async function loadAprilTag() {
                                     ]
                                 );
 
+                            const setPoseInfo =
+                                Module.cwrap(
+                                    "atagjs_set_pose_info",
+                                    "number",
+                                    [
+                                        "number",
+                                        "number",
+                                        "number",
+                                        "number"
+                                    ]
+                                );
+
+                            const setTagSize =
+                                Module.cwrap(
+                                    "atagjs_set_tag_size",
+                                    "number",
+                                    [
+                                        "number",
+                                        "number"
+                                    ]
+                                );
 
                             const detectWasm =
                                 Module.cwrap(
@@ -560,35 +655,71 @@ async function loadAprilTag() {
                                     []
                                 );
 
+                            const initResult =
+                                init();
 
-                            init();
-
+                            if (initResult !== 0) {
+                                throw new Error(
+                                    "Échec initialisation moteur AprilTag."
+                                );
+                            }
 
                             /*
-                                quad_decimate
-                                quad_sigma
-                                nthreads
-                                refine_edges
-                                max_detections
-                                return_pose
-                                return_solutions
-
-                                Pour cette phase :
-                                uniquement détection 2D.
+                              quad_decimate
+                              quad_sigma
+                              nthreads
+                              refine_edges
+                              max_detections
+                              return_pose = 1
+                              return_solutions = 0
                             */
-
                             options(
                                 1.5,
                                 0,
                                 1,
                                 1,
                                 0,
-                                0,
+                                1,
                                 0
                             );
 
+                            /*
+                              Tous les IDs du cube sont supposés
+                              avoir le même tag physique de 40 mm.
+                            */
+                            for (
+                                let id = 0;
+                                id <= MAX_TAG_ID_TO_CONFIGURE;
+                                id++
+                            ) {
+                                setTagSize(
+                                    id,
+                                    TAG_SIZE_M
+                                );
+                            }
 
                             detector = {
+
+                                setCameraInfo(
+                                    fx,
+                                    fy,
+                                    cx,
+                                    cy
+                                ) {
+                                    const result =
+                                        setPoseInfo(
+                                            fx,
+                                            fy,
+                                            cx,
+                                            cy
+                                        );
+
+                                    if (result !== 0) {
+                                        throw new Error(
+                                            "Impossible de configurer les paramètres caméra."
+                                        );
+                                    }
+                                },
 
                                 async detect(
                                     gray,
@@ -603,36 +734,29 @@ async function loadAprilTag() {
                                             width
                                         );
 
-
                                     if (
                                         !Number.isFinite(buffer) ||
                                         buffer <= 0
                                     ) {
-
                                         throw new Error(
                                             "Impossible de créer le buffer image WASM."
                                         );
                                     }
-
 
                                     Module.HEAPU8.set(
                                         gray,
                                         buffer
                                     );
 
-
                                     const ptr =
                                         detectWasm();
-
 
                                     if (
                                         !Number.isFinite(ptr) ||
                                         ptr <= 0
                                     ) {
-
                                         return [];
                                     }
-
 
                                     const length =
                                         Module.getValue(
@@ -640,24 +764,17 @@ async function loadAprilTag() {
                                             "i32"
                                         );
 
-
                                     if (
                                         !Number.isFinite(length)
                                     ) {
-
                                         throw new Error(
                                             "Longueur de résultat AprilTag invalide."
                                         );
                                     }
 
-
-                                    if (
-                                        length <= 0
-                                    ) {
-
+                                    if (length <= 0) {
                                         return [];
                                     }
-
 
                                     const stringPtr =
                                         Module.getValue(
@@ -665,17 +782,14 @@ async function loadAprilTag() {
                                             "i32"
                                         );
 
-
                                     if (
                                         !Number.isFinite(stringPtr) ||
                                         stringPtr <= 0
                                     ) {
-
                                         throw new Error(
                                             "Adresse du résultat AprilTag invalide."
                                         );
                                     }
-
 
                                     const bytes =
                                         new Uint8Array(
@@ -684,21 +798,12 @@ async function loadAprilTag() {
                                             length
                                         );
 
-
                                     let json = "";
-
-
-                                    /*
-                                       TextDecoder est préférable
-                                       mais on garde un secours
-                                       compatible Safari.
-                                    */
 
                                     if (
                                         typeof TextDecoder !==
                                         "undefined"
                                     ) {
-
                                         json =
                                             new TextDecoder(
                                                 "utf-8"
@@ -706,7 +811,6 @@ async function loadAprilTag() {
                                             .decode(
                                                 bytes
                                             );
-
                                     }
                                     else {
 
@@ -715,7 +819,6 @@ async function loadAprilTag() {
                                             i < length;
                                             i++
                                         ) {
-
                                             json +=
                                                 String.fromCharCode(
                                                     bytes[i]
@@ -723,49 +826,39 @@ async function loadAprilTag() {
                                         }
                                     }
 
-
                                     if (!json) {
-
                                         return [];
                                     }
-
 
                                     const result =
                                         JSON.parse(
                                             json
                                         );
 
-
                                     if (
                                         !Array.isArray(result)
                                     ) {
-
                                         throw new Error(
                                             "Le détecteur n'a pas renvoyé un tableau."
                                         );
                                     }
 
-
                                     return result;
                                 }
-
                             };
 
-
                             diagnostic.innerHTML =
-
                                 "<span class='ok'>" +
                                 "MOTEUR APRILTAG : PRÊT" +
                                 "</span>" +
-
                                 "<br>" +
-
                                 "Famille : tag36h11" +
-
                                 "<br>" +
-
-                                "WebAssembly : chargé";
-
+                                "Pose 3D : activée" +
+                                "<br>" +
+                                "Tag : " +
+                                (TAG_SIZE_M * 1000).toFixed(1) +
+                                " mm";
 
                             resolve(
                                 detector
@@ -773,17 +866,13 @@ async function loadAprilTag() {
                         }
 
                         catch(error) {
-
-                            reject(
-                                error
-                            );
+                            reject(error);
                         }
                     }
 
 
                     const promise =
                         getModulePromise();
-
 
                     if (promise) {
 
@@ -796,7 +885,6 @@ async function loadAprilTag() {
                         .catch(
                             reject
                         );
-
                     }
                     else {
 
@@ -805,7 +893,6 @@ async function loadAprilTag() {
 
                                 const delayed =
                                     getModulePromise();
-
 
                                 if (delayed) {
 
@@ -818,7 +905,6 @@ async function loadAprilTag() {
                                     .catch(
                                         reject
                                     );
-
                                 }
                                 else {
 
@@ -833,17 +919,12 @@ async function loadAprilTag() {
                             300
                         );
                     }
-
                 }
 
                 catch(error) {
-
-                    reject(
-                        error
-                    );
+                    reject(error);
                 }
             };
-
 
             script.onerror =
             function() {
@@ -854,7 +935,6 @@ async function loadAprilTag() {
                     )
                 );
             };
-
 
             document.head.appendChild(
                 script
@@ -873,39 +953,32 @@ async function startCamera() {
     startButton.disabled =
         true;
 
-
     try {
 
         if (
             !window.isSecureContext
         ) {
-
             throw new Error(
                 "Cette page doit être ouverte en HTTPS."
             );
         }
 
-
         if (
             !navigator.mediaDevices ||
             !navigator.mediaDevices.getUserMedia
         ) {
-
             throw new Error(
                 "API caméra non disponible."
             );
         }
 
-
         await loadAprilTag();
-
 
         setMessage(
             "Ouverture caméra…",
             "Activation de la caméra arrière.",
             "warning"
         );
-
 
         stream =
             await navigator
@@ -927,65 +1000,48 @@ async function startCamera() {
                     height: {
                         ideal: 720
                     }
-
                 }
-
             });
-
 
         video.srcObject =
             stream;
 
-
         await video.play();
-
 
         await waitForVideo();
 
-
         configureCanvas();
 
-
         startButton
-        .classList
-        .add(
-            "hidden"
-        );
-
+            .classList
+            .add(
+                "hidden"
+            );
 
         stopButton
-        .classList
-        .remove(
-            "hidden"
-        );
-
+            .classList
+            .remove(
+                "hidden"
+            );
 
         setMessage(
             "Recherche AprilTag…",
-            "Présentez un tag36h11 devant la caméra.",
+            "Présentez le cube devant la caméra.",
             "warning"
         );
-
 
         animationId =
             requestAnimationFrame(
                 scanFrame
             );
-
     }
 
     catch(error) {
 
         const message =
-            errorText(
-                error
-            );
+            errorText(error);
 
-
-        console.error(
-            error
-        );
-
+        console.error(error);
 
         setMessage(
             "Erreur",
@@ -993,14 +1049,11 @@ async function startCamera() {
             "error"
         );
 
-
         diagnostic.innerHTML =
-
             "<span class='error'>" +
             "ERREUR : " +
             escapeHtml(message) +
             "</span>";
-
 
         startButton.disabled =
             false;
@@ -1021,12 +1074,9 @@ function waitForVideo() {
                 video.videoWidth > 0 &&
                 video.videoHeight > 0
             ) {
-
                 resolve();
-
                 return;
             }
-
 
             video.addEventListener(
                 "loadedmetadata",
@@ -1041,7 +1091,7 @@ function waitForVideo() {
 
 
 /* ============================================================
-   CANVAS
+   CANVAS + MODÈLE CAMÉRA
 ============================================================ */
 
 function configureCanvas() {
@@ -1052,19 +1102,15 @@ function configureCanvas() {
     const height =
         video.videoHeight;
 
-
     viewer.style.aspectRatio =
         width + "/" + height;
 
-
     /*
-       On limite l'analyse pour préserver
-       les performances de Safari/iPad.
+      Résolution d'analyse limitée
+      pour préserver Safari/iPad.
     */
-
     const maximum =
         800;
-
 
     const factor =
         Math.min(
@@ -1076,18 +1122,15 @@ function configureCanvas() {
             )
         );
 
-
     analysis.width =
         Math.round(
             width * factor
         );
 
-
     analysis.height =
         Math.round(
             height * factor
         );
-
 
     overlay.width =
         analysis.width;
@@ -1095,37 +1138,89 @@ function configureCanvas() {
     overlay.height =
         analysis.height;
 
-
     grayBuffer =
         new Uint8Array(
             analysis.width *
             analysis.height
         );
 
+    /*
+      Intrinsèques PROVISOIRES :
+      Safari ne nous donne pas ici la calibration native complète.
+      On convertit un HFOV approximatif en focale pixels.
+    */
+    const hfovRad =
+        CAMERA_HFOV_DEG *
+        Math.PI /
+        180;
+
+    const fx =
+        (analysis.width / 2) /
+        Math.tan(
+            hfovRad / 2
+        );
+
+    /*
+      Pixels carrés : fy ≈ fx.
+    */
+    const fy =
+        fx;
+
+    const cx =
+        analysis.width / 2;
+
+    const cy =
+        analysis.height / 2;
+
+    cameraModel = {
+        fx,
+        fy,
+        cx,
+        cy
+    };
+
+    detector.setCameraInfo(
+        fx,
+        fy,
+        cx,
+        cy
+    );
 
     diagnostic.innerHTML =
-
         "<span class='ok'>" +
-        "CAMÉRA + APRILTAG : PRÊTS" +
+        "CAMÉRA + APRILTAG + POSE : PRÊTS" +
         "</span>" +
-
         "<br>" +
-
         "Famille : tag36h11" +
-
         "<br>" +
-
         "Caméra : " +
         width +
         " × " +
         height +
-
         "<br>" +
-
         "Analyse : " +
         analysis.width +
         " × " +
-        analysis.height;
+        analysis.height +
+        "<br>" +
+        "Tag : " +
+        (TAG_SIZE_M * 1000).toFixed(1) +
+        " mm • Cube : " +
+        (CUBE_EDGE_M * 1000).toFixed(1) +
+        " mm" +
+        "<br>" +
+        "HFOV provisoire : " +
+        CAMERA_HFOV_DEG +
+        "°";
+
+    smoothedCubeCenter =
+        null;
+
+    previousCubeCenter =
+        null;
+
+    stabilityMm =
+        null;
 }
 
 
@@ -1140,10 +1235,8 @@ function imageToGray(
     const data =
         imageData.data;
 
-
     let destinationIndex =
         0;
-
 
     for (
         let sourceIndex = 0;
@@ -1152,25 +1245,13 @@ function imageToGray(
     ) {
 
         const r =
-            data[
-                sourceIndex
-            ];
+            data[sourceIndex];
 
         const g =
-            data[
-                sourceIndex + 1
-            ];
+            data[sourceIndex + 1];
 
         const b =
-            data[
-                sourceIndex + 2
-            ];
-
-
-        /*
-           Pondération luminance.
-           Plus propre que moyenne R/G/B.
-        */
+            data[sourceIndex + 2];
 
         grayBuffer[
             destinationIndex
@@ -1181,9 +1262,226 @@ function imageToGray(
                 0.114 * b
             );
 
-
         destinationIndex++;
     }
+}
+
+
+/* ============================================================
+   CALCUL CENTRE CUBE MULTI-TAGS
+
+   Pour chaque face détectée :
+   centre_cube ≈ centre_tag +/− normale_tag × demi-arête.
+
+   On choisit le signe qui place le centre du cube
+   légèrement PLUS LOIN de la caméra que la face visible.
+============================================================ */
+
+function estimateCubeCenter(
+    markers
+) {
+
+    const candidates = [];
+
+    for (const marker of markers) {
+
+        if (
+            !marker.pose ||
+            !Array.isArray(marker.pose.t) ||
+            marker.pose.t.length < 3
+        ) {
+            continue;
+        }
+
+        const t = [
+            Number(marker.pose.t[0]),
+            Number(marker.pose.t[1]),
+            Number(marker.pose.t[2])
+        ];
+
+        if (
+            !t.every(
+                Number.isFinite
+            )
+        ) {
+            continue;
+        }
+
+        const axes =
+            poseAxes(marker);
+
+        if (!axes) {
+            continue;
+        }
+
+        const half =
+            CUBE_EDGE_M / 2;
+
+        const candidateA =
+            vecAdd(
+                t,
+                vecScale(
+                    axes.z,
+                    half
+                )
+            );
+
+        const candidateB =
+            vecSub(
+                t,
+                vecScale(
+                    axes.z,
+                    half
+                )
+            );
+
+        /*
+          La face visible est devant le centre géométrique :
+          le centre du cube doit normalement avoir un Z
+          supérieur à celui de la face.
+        */
+        const cubePoint =
+            candidateA[2] >= candidateB[2]
+                ? candidateA
+                : candidateB;
+
+        const error =
+            marker.pose &&
+            Number.isFinite(
+                Number(marker.pose.e)
+            )
+                ? Math.max(
+                    Number(marker.pose.e),
+                    1e-7
+                )
+                : 1e-4;
+
+        /*
+          Poids inverse de l'erreur.
+          On plafonne pour éviter qu'une mesure prenne
+          un poids démesuré.
+        */
+        const weight =
+            Math.min(
+                100000,
+                1 / error
+            );
+
+        candidates.push({
+            marker,
+            point: cubePoint,
+            weight
+        });
+    }
+
+    if (candidates.length === 0) {
+        return null;
+    }
+
+    let sumWeight = 0;
+    let sum = [0, 0, 0];
+
+    for (const candidate of candidates) {
+
+        sum =
+            vecAdd(
+                sum,
+                vecScale(
+                    candidate.point,
+                    candidate.weight
+                )
+            );
+
+        sumWeight +=
+            candidate.weight;
+    }
+
+    const center =
+        vecScale(
+            sum,
+            1 / sumWeight
+        );
+
+    return {
+        center,
+        candidates
+    };
+}
+
+
+/* ============================================================
+   LISSAGE + STABILITÉ
+============================================================ */
+
+function updateSmoothedCenter(
+    rawCenter
+) {
+
+    if (!rawCenter) {
+        return null;
+    }
+
+    if (!smoothedCubeCenter) {
+
+        smoothedCubeCenter =
+            [...rawCenter];
+
+        previousCubeCenter =
+            [...rawCenter];
+
+        stabilityMm =
+            0;
+
+        return smoothedCubeCenter;
+    }
+
+    const before =
+        [...smoothedCubeCenter];
+
+    smoothedCubeCenter =
+        lerpVec(
+            smoothedCubeCenter,
+            rawCenter,
+            CENTER_SMOOTHING_ALPHA
+        );
+
+    stabilityMm =
+        vecLength(
+            vecSub(
+                smoothedCubeCenter,
+                before
+            )
+        ) * 1000;
+
+    previousCubeCenter =
+        before;
+
+    return smoothedCubeCenter;
+}
+
+
+function stabilityLabel() {
+
+    if (
+        stabilityMm === null ||
+        !Number.isFinite(stabilityMm)
+    ) {
+        return "—";
+    }
+
+    if (stabilityMm < 1.5) {
+        return "très stable";
+    }
+
+    if (stabilityMm < 4) {
+        return "stable";
+    }
+
+    if (stabilityMm < 8) {
+        return "moyen";
+    }
+
+    return "instable";
 }
 
 
@@ -1200,64 +1498,44 @@ async function scanFrame(
             scanFrame
         );
 
-
     if (
         !stream ||
         !detector ||
         video.readyState < 2
     ) {
-
         return;
     }
 
-
-    /*
-       Évite deux détections WASM simultanées.
-    */
-
-    if (
-        detectionRunning
-    ) {
-
+    if (detectionRunning) {
         return;
     }
 
-
     /*
-       ~8 analyses par seconde.
-       Suffisant pour le test.
+      Environ 8 analyses / seconde.
     */
-
     if (
         timestamp -
         lastDetectionTime <
         125
     ) {
-
         return;
     }
-
 
     lastDetectionTime =
         timestamp;
 
-
     detectionRunning =
         true;
-
 
     try {
 
         analysisCtx.drawImage(
             video,
-
             0,
             0,
-
             analysis.width,
             analysis.height
         );
-
 
         const imageData =
             analysisCtx.getImageData(
@@ -1267,34 +1545,37 @@ async function scanFrame(
                 analysis.height
             );
 
-
         imageToGray(
             imageData
         );
 
-
-        /*
-           IMPORTANT :
-           on attend maintenant réellement
-           la réponse du détecteur.
-        */
-
         const markers =
             await detector.detect(
-
                 grayBuffer,
-
                 analysis.width,
-
                 analysis.height
-
             );
 
+        const cubeEstimate =
+            estimateCubeCenter(
+                markers
+            );
 
-        drawMarkers(
-            markers
+        let cubeCenter = null;
+
+        if (cubeEstimate) {
+
+            cubeCenter =
+                updateSmoothedCenter(
+                    cubeEstimate.center
+                );
+        }
+
+        drawScene(
+            markers,
+            cubeEstimate,
+            cubeCenter
         );
-
 
         if (
             markers &&
@@ -1303,47 +1584,101 @@ async function scanFrame(
 
             const ids =
                 markers
-                .map(
-                    marker =>
-                        marker.id
-                )
-                .join(", ");
+                    .map(
+                        marker =>
+                            marker.id
+                    )
+                    .join(", ");
 
+            const poseCount =
+                markers.filter(
+                    marker =>
+                        marker.pose &&
+                        marker.pose.t
+                ).length;
 
             setMessage(
-                "TAG DÉTECTÉ ✓",
-                "ID : " + ids,
+                "POSE 3D ACTIVE ✓",
+                "ID : " +
+                ids +
+                " • poses : " +
+                poseCount +
+                "/" +
+                markers.length,
                 "ok"
             );
 
+            if (cubeCenter) {
 
-            diagnostic.innerHTML =
+                const xMm =
+                    cubeCenter[0] * 1000;
 
-                "<span class='ok'>" +
-                "APRILTAG DÉTECTÉ" +
-                "</span>" +
+                const yMm =
+                    cubeCenter[1] * 1000;
 
-                "<br>" +
+                const zMm =
+                    cubeCenter[2] * 1000;
 
-                "Famille : tag36h11" +
+                poseX.textContent =
+                    xMm.toFixed(1) +
+                    " mm";
 
-                "<br>" +
+                poseY.textContent =
+                    yMm.toFixed(1) +
+                    " mm";
 
-                "ID : " +
-                ids +
+                poseZ.textContent =
+                    zMm.toFixed(1) +
+                    " mm";
 
-                "<br>" +
-
-                "Nombre : " +
-                markers.length;
-
+                diagnostic.innerHTML =
+                    "<span class='ok'>" +
+                    "CENTRE CUBE ESTIMÉ" +
+                    "</span>" +
+                    "<br>" +
+                    "Tags visibles : " +
+                    markers.length +
+                    " • ID : " +
+                    ids +
+                    "<br>" +
+                    "X : " +
+                    xMm.toFixed(1) +
+                    " mm" +
+                    " • Y : " +
+                    yMm.toFixed(1) +
+                    " mm" +
+                    " • Z : " +
+                    zMm.toFixed(1) +
+                    " mm" +
+                    "<br>" +
+                    "Variation : " +
+                    (
+                        stabilityMm !== null
+                            ? stabilityMm.toFixed(2)
+                            : "—"
+                    ) +
+                    " mm/frame" +
+                    " • " +
+                    stabilityLabel() +
+                    "<br>" +
+                    "<span class='warning'>" +
+                    "Calibration métrique encore provisoire (HFOV " +
+                    CAMERA_HFOV_DEG +
+                    "°)." +
+                    "</span>";
+            }
         }
         else {
 
-            drawMarkers(
-                []
+            drawScene(
+                [],
+                null,
+                null
             );
 
+            poseX.textContent = "—";
+            poseY.textContent = "—";
+            poseZ.textContent = "—";
 
             setMessage(
                 "Recherche AprilTag…",
@@ -1351,22 +1686,17 @@ async function scanFrame(
                 "warning"
             );
         }
-
     }
 
     catch(error) {
 
         const message =
-            errorText(
-                error
-            );
-
+            errorText(error);
 
         console.error(
             "Erreur détection :",
             error
         );
-
 
         setMessage(
             "Erreur détection",
@@ -1374,15 +1704,11 @@ async function scanFrame(
             "error"
         );
 
-
         diagnostic.innerHTML =
-
             "<span class='error'>" +
             "ERREUR DÉTECTION" +
             "</span>" +
-
             "<br>" +
-
             escapeHtml(
                 message
             );
@@ -1397,11 +1723,13 @@ async function scanFrame(
 
 
 /* ============================================================
-   DESSIN TAGS
+   DESSIN
 ============================================================ */
 
-function drawMarkers(
-    markers
+function drawScene(
+    markers,
+    cubeEstimate,
+    cubeCenter
 ) {
 
     overlayCtx.clearRect(
@@ -1411,199 +1739,453 @@ function drawMarkers(
         overlay.height
     );
 
-
     if (
         !markers ||
         markers.length === 0
     ) {
-
         return;
     }
-
 
     markers.forEach(
         function(marker) {
 
-            const corners =
-                marker.corners;
-
-
-            if (
-                !corners ||
-                corners.length < 4
-            ) {
-
-                return;
-            }
-
-
-            /* CONTOUR */
-
-            overlayCtx.beginPath();
-
-            overlayCtx.moveTo(
-                corners[0].x,
-                corners[0].y
+            drawMarker(
+                marker
             );
 
+            drawTagAxes(
+                marker
+            );
+        }
+    );
 
-            for (
-                let i = 1;
-                i < 4;
-                i++
-            ) {
+    if (
+        cubeEstimate &&
+        cubeEstimate.candidates
+    ) {
 
-                overlayCtx.lineTo(
-                    corners[i].x,
-                    corners[i].y
+        for (
+            const candidate
+            of cubeEstimate.candidates
+        ) {
+
+            const p =
+                project3D(
+                    candidate.point
                 );
+
+            if (p) {
+
+                overlayCtx.beginPath();
+
+                overlayCtx.arc(
+                    p.x,
+                    p.y,
+                    5,
+                    0,
+                    Math.PI * 2
+                );
+
+                overlayCtx.fillStyle =
+                    "#ffd60a";
+
+                overlayCtx.fill();
             }
+        }
+    }
 
+    if (cubeCenter) {
 
-            overlayCtx.closePath();
-
-            overlayCtx.lineWidth =
-                5;
-
-            overlayCtx.strokeStyle =
-                "#39ff74";
-
-            overlayCtx.stroke();
-
-
-            /* COINS */
-
-            corners.forEach(
-                function(point) {
-
-                    overlayCtx.beginPath();
-
-                    overlayCtx.arc(
-                        point.x,
-                        point.y,
-                        6,
-                        0,
-                        Math.PI * 2
-                    );
-
-                    overlayCtx.fillStyle =
-                        "#00c8ff";
-
-                    overlayCtx.fill();
-                }
+        const center2D =
+            project3D(
+                cubeCenter
             );
 
+        if (center2D) {
 
-            /* CENTRE */
+            drawCross(
+                center2D.x,
+                center2D.y,
+                14,
+                "#ff2d55",
+                5
+            );
 
-            let centerX;
-            let centerY;
+            overlayCtx.font =
+                "bold 18px -apple-system";
+
+            overlayCtx.textAlign =
+                "center";
+
+            overlayCtx.fillStyle =
+                "rgba(0,0,0,.82)";
+
+            overlayCtx.fillRect(
+                center2D.x - 66,
+                center2D.y + 17,
+                132,
+                28
+            );
+
+            overlayCtx.fillStyle =
+                "#ff5b79";
+
+            overlayCtx.fillText(
+                "CENTRE CUBE",
+                center2D.x,
+                center2D.y + 38
+            );
+        }
+    }
+}
 
 
-            if (
-                marker.center &&
-                Number.isFinite(
-                    marker.center.x
-                ) &&
-                Number.isFinite(
-                    marker.center.y
-                )
-            ) {
+function drawMarker(
+    marker
+) {
 
-                centerX =
-                    marker.center.x;
+    const corners =
+        marker.corners;
 
-                centerY =
-                    marker.center.y;
+    if (
+        !corners ||
+        corners.length < 4
+    ) {
+        return;
+    }
 
-            }
-            else {
+    /* CONTOUR */
+    overlayCtx.beginPath();
 
-                centerX =
-                    (
-                        corners[0].x +
-                        corners[1].x +
-                        corners[2].x +
-                        corners[3].x
-                    ) / 4;
+    overlayCtx.moveTo(
+        corners[0].x,
+        corners[0].y
+    );
 
+    for (
+        let i = 1;
+        i < 4;
+        i++
+    ) {
+        overlayCtx.lineTo(
+            corners[i].x,
+            corners[i].y
+        );
+    }
 
-                centerY =
-                    (
-                        corners[0].y +
-                        corners[1].y +
-                        corners[2].y +
-                        corners[3].y
-                    ) / 4;
-            }
+    overlayCtx.closePath();
 
+    overlayCtx.lineWidth =
+        5;
+
+    overlayCtx.strokeStyle =
+        "#39ff74";
+
+    overlayCtx.stroke();
+
+    /* COINS NUMÉROTÉS */
+    corners.forEach(
+        function(point, index) {
 
             overlayCtx.beginPath();
 
             overlayCtx.arc(
-                centerX,
-                centerY,
-                8,
+                point.x,
+                point.y,
+                6,
                 0,
                 Math.PI * 2
             );
 
             overlayCtx.fillStyle =
-                "#ff3b30";
+                "#00c8ff";
 
             overlayCtx.fill();
 
-
-            /* ID */
-
-            const label =
-                "ID " +
-                marker.id;
-
-
             overlayCtx.font =
-                "bold 24px -apple-system";
-
-
-            const metrics =
-                overlayCtx.measureText(
-                    label
-                );
-
-
-            overlayCtx.fillStyle =
-                "rgba(0,0,0,.78)";
-
-
-            overlayCtx.fillRect(
-
-                centerX -
-                metrics.width / 2 -
-                8,
-
-                centerY - 44,
-
-                metrics.width + 16,
-
-                34
-            );
-
-
-            overlayCtx.fillStyle =
-                "#39ff74";
-
+                "bold 13px -apple-system";
 
             overlayCtx.textAlign =
                 "center";
 
+            overlayCtx.fillStyle =
+                "white";
 
             overlayCtx.fillText(
-                label,
-                centerX,
-                centerY - 18
+                String(index),
+                point.x,
+                point.y - 10
             );
         }
     );
+
+    /* CENTRE */
+    let centerX;
+    let centerY;
+
+    if (
+        marker.center &&
+        Number.isFinite(
+            marker.center.x
+        ) &&
+        Number.isFinite(
+            marker.center.y
+        )
+    ) {
+        centerX =
+            marker.center.x;
+
+        centerY =
+            marker.center.y;
+    }
+    else {
+
+        centerX =
+            (
+                corners[0].x +
+                corners[1].x +
+                corners[2].x +
+                corners[3].x
+            ) / 4;
+
+        centerY =
+            (
+                corners[0].y +
+                corners[1].y +
+                corners[2].y +
+                corners[3].y
+            ) / 4;
+    }
+
+    overlayCtx.beginPath();
+
+    overlayCtx.arc(
+        centerX,
+        centerY,
+        8,
+        0,
+        Math.PI * 2
+    );
+
+    overlayCtx.fillStyle =
+        "#ff3b30";
+
+    overlayCtx.fill();
+
+    /* ID */
+    const label =
+        "ID " +
+        marker.id;
+
+    overlayCtx.font =
+        "bold 24px -apple-system";
+
+    const metrics =
+        overlayCtx.measureText(
+            label
+        );
+
+    overlayCtx.fillStyle =
+        "rgba(0,0,0,.78)";
+
+    overlayCtx.fillRect(
+        centerX -
+        metrics.width / 2 -
+        8,
+        centerY - 44,
+        metrics.width + 16,
+        34
+    );
+
+    overlayCtx.fillStyle =
+        "#39ff74";
+
+    overlayCtx.textAlign =
+        "center";
+
+    overlayCtx.fillText(
+        label,
+        centerX,
+        centerY - 18
+    );
+}
+
+
+function drawTagAxes(
+    marker
+) {
+
+    if (
+        !marker.pose ||
+        !Array.isArray(marker.pose.t)
+    ) {
+        return;
+    }
+
+    const axes =
+        poseAxes(marker);
+
+    if (!axes) {
+        return;
+    }
+
+    const origin3D = [
+        Number(marker.pose.t[0]),
+        Number(marker.pose.t[1]),
+        Number(marker.pose.t[2])
+    ];
+
+    if (
+        !origin3D.every(
+            Number.isFinite
+        )
+    ) {
+        return;
+    }
+
+    /*
+      Axe physique de 20 mm.
+    */
+    const axisLength =
+        0.020;
+
+    const origin2D =
+        project3D(
+            origin3D
+        );
+
+    if (!origin2D) {
+        return;
+    }
+
+    const endpoints = [
+        {
+            axis: "X",
+            color: "#ff453a",
+            point:
+                vecAdd(
+                    origin3D,
+                    vecScale(
+                        axes.x,
+                        axisLength
+                    )
+                )
+        },
+        {
+            axis: "Y",
+            color: "#32d74b",
+            point:
+                vecAdd(
+                    origin3D,
+                    vecScale(
+                        axes.y,
+                        axisLength
+                    )
+                )
+        },
+        {
+            axis: "Z",
+            color: "#0a84ff",
+            point:
+                vecAdd(
+                    origin3D,
+                    vecScale(
+                        axes.z,
+                        axisLength
+                    )
+                )
+        }
+    ];
+
+    for (
+        const item
+        of endpoints
+    ) {
+
+        const p =
+            project3D(
+                item.point
+            );
+
+        if (!p) {
+            continue;
+        }
+
+        overlayCtx.beginPath();
+
+        overlayCtx.moveTo(
+            origin2D.x,
+            origin2D.y
+        );
+
+        overlayCtx.lineTo(
+            p.x,
+            p.y
+        );
+
+        overlayCtx.lineWidth =
+            4;
+
+        overlayCtx.strokeStyle =
+            item.color;
+
+        overlayCtx.stroke();
+
+        overlayCtx.font =
+            "bold 16px -apple-system";
+
+        overlayCtx.fillStyle =
+            item.color;
+
+        overlayCtx.textAlign =
+            "center";
+
+        overlayCtx.fillText(
+            item.axis,
+            p.x,
+            p.y - 4
+        );
+    }
+}
+
+
+function drawCross(
+    x,
+    y,
+    size,
+    color,
+    width
+) {
+
+    overlayCtx.beginPath();
+
+    overlayCtx.moveTo(
+        x - size,
+        y
+    );
+
+    overlayCtx.lineTo(
+        x + size,
+        y
+    );
+
+    overlayCtx.moveTo(
+        x,
+        y - size
+    );
+
+    overlayCtx.lineTo(
+        x,
+        y + size
+    );
+
+    overlayCtx.lineWidth =
+        width;
+
+    overlayCtx.strokeStyle =
+        color;
+
+    overlayCtx.stroke();
 }
 
 
@@ -1613,9 +2195,7 @@ function drawMarkers(
 
 function stopCamera() {
 
-    if (
-        animationId
-    ) {
+    if (animationId) {
 
         cancelAnimationFrame(
             animationId
@@ -1625,21 +2205,16 @@ function stopCamera() {
             null;
     }
 
-
-    if (
-        stream
-    ) {
+    if (stream) {
 
         stream
-        .getTracks()
-        .forEach(
-            function(track) {
-
-                track.stop();
-            }
-        );
+            .getTracks()
+            .forEach(
+                function(track) {
+                    track.stop();
+                }
+            );
     }
-
 
     stream =
         null;
@@ -1650,6 +2225,14 @@ function stopCamera() {
     detectionRunning =
         false;
 
+    smoothedCubeCenter =
+        null;
+
+    previousCubeCenter =
+        null;
+
+    stabilityMm =
+        null;
 
     overlayCtx.clearRect(
         0,
@@ -1658,62 +2241,28 @@ function stopCamera() {
         overlay.height
     );
 
+    poseX.textContent = "—";
+    poseY.textContent = "—";
+    poseZ.textContent = "—";
 
     startButton.disabled =
         false;
 
-
     startButton
-    .classList
-    .remove(
-        "hidden"
-    );
-
+        .classList
+        .remove(
+            "hidden"
+        );
 
     stopButton
-    .classList
-    .add(
-        "hidden"
-    );
-
+        .classList
+        .add(
+            "hidden"
+        );
 
     setMessage(
         "Caméra arrêtée",
         "Touchez Démarrer caméra pour reprendre."
-    );
-}
-
-
-/* ============================================================
-   SÉCURITÉ HTML DIAGNOSTIC
-============================================================ */
-
-function escapeHtml(
-    value
-) {
-
-    return String(
-        value
-    )
-    .replaceAll(
-        "&",
-        "&amp;"
-    )
-    .replaceAll(
-        "<",
-        "&lt;"
-    )
-    .replaceAll(
-        ">",
-        "&gt;"
-    )
-    .replaceAll(
-        '"',
-        "&quot;"
-    )
-    .replaceAll(
-        "'",
-        "&#039;"
     );
 }
 
@@ -1727,18 +2276,15 @@ startButton.addEventListener(
     startCamera
 );
 
-
 stopButton.addEventListener(
     "click",
     stopCamera
 );
 
-
 window.addEventListener(
     "pagehide",
     stopCamera
 );
-
 </script>
 
 </body>
