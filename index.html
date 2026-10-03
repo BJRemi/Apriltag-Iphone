@@ -11,7 +11,7 @@ user-scalable=no">
 
 <meta name="theme-color" content="#05070a">
 
-<title>AprilTag iPad V5.1</title>
+<title>AprilTag iPad V5.2</title>
 
 <style>
 
@@ -25,8 +25,12 @@ html,body{
     min-height:100%;
     background:#05070a;
     color:white;
-    font-family:-apple-system,BlinkMacSystemFont,
-    "SF Pro Display",system-ui,sans-serif;
+    font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Display",
+    system-ui,
+    sans-serif;
 }
 
 body{
@@ -38,9 +42,9 @@ body{
     max-width:900px;
     margin:auto;
     padding:
-        env(safe-area-inset-top)
-        14px
-        env(safe-area-inset-bottom);
+    env(safe-area-inset-top)
+    14px
+    env(safe-area-inset-bottom);
 }
 
 h1{
@@ -57,7 +61,7 @@ h1{
 .viewer{
     position:relative;
     width:100%;
-    aspect-ratio:3/4;
+    aspect-ratio:4/3;
     overflow:hidden;
     border-radius:20px;
     background:#111;
@@ -65,7 +69,7 @@ h1{
 }
 
 video,
-#overlay{
+canvas{
     position:absolute;
     inset:0;
     width:100%;
@@ -77,7 +81,7 @@ video{
     background:#000;
 }
 
-#overlay{
+canvas{
     z-index:1;
     pointer-events:none;
 }
@@ -120,8 +124,10 @@ video{
 button{
     flex:1;
     min-height:52px;
+
     border:0;
     border-radius:14px;
+
     font-size:16px;
     font-weight:700;
 }
@@ -143,11 +149,16 @@ button{
 
 .info{
     margin-top:14px;
+
     padding:12px;
+
     border-radius:14px;
+
     background:#11161d;
+
     font-size:13px;
     line-height:1.55;
+
     color:#b8c0cb;
 }
 
@@ -163,10 +174,6 @@ button{
     color:#ffd36b;
 }
 
-.tag{
-    color:#70e59b;
-}
-
 </style>
 </head>
 
@@ -177,7 +184,7 @@ button{
 <h1>AprilTag iPad</h1>
 
 <div class="version">
-V5.1 — Détection tag36h11
+V5.2 — Détection tag36h11
 </div>
 
 <div
@@ -204,7 +211,7 @@ V5.1 — Détection tag36h11
         <div
             id="detail"
             class="detail">
-            Touchez « Démarrer caméra ».
+            Initialisation du moteur AprilTag…
         </div>
 
     </div>
@@ -236,12 +243,11 @@ V5.1 — Détection tag36h11
 </main>
 
 
-<!--
-Moteur AprilTag tag36h11 compilé avec Emscripten
+<!-- IMPORTANT :
+     apriltag.js doit être dans le même dossier
+     que index.html
 -->
-<script
-src="https://raw.githubusercontent.com/dividuum/apriltags-emscripten/master/html/apriltag.js">
-</script>
+<script src="apriltag.js"></script>
 
 
 <script>
@@ -280,18 +286,16 @@ let detector = null;
 
 let detectionRunning = false;
 
-let detectorReady = false;
-
-let detectorTimer = null;
-
-let detectedFrames = 0;
+let detectionTimer = null;
 
 let totalFrames = 0;
 
+let detectedFrames = 0;
 
-/* =============================================
+
+/* ================================================
    MESSAGE
-============================================= */
+================================================ */
 
 function message(title,text,type=""){
 
@@ -304,31 +308,33 @@ function message(title,text,type=""){
 }
 
 
-/* =============================================
-   CRÉATION DU DÉTECTEUR APRILTAG
-============================================= */
+/* ================================================
+   APRILTAG
+================================================ */
 
 function createAprilTagDetector(){
 
+    const detections = [];
+
+
     if(
         typeof Module === "undefined" ||
-        typeof Runtime === "undefined" ||
         !Module.cwrap
     ){
-
-        detectorReady = false;
-
-        diagnostic.innerHTML =
-        "<span class='error'>" +
-        "MOTEUR APRILTAG : NON CHARGÉ" +
-        "</span><br>" +
-        "La caméra peut fonctionner mais pas la détection.";
-
-        return null;
+        throw new Error(
+            "Module AprilTag indisponible."
+        );
     }
 
 
-    const detections = [];
+    if(
+        typeof Runtime === "undefined" ||
+        !Runtime.addFunction
+    ){
+        throw new Error(
+            "Runtime AprilTag indisponible."
+        );
+    }
 
 
     const detect =
@@ -344,79 +350,145 @@ function createAprilTagDetector(){
     );
 
 
-    const detectedCallback =
-    Runtime.addFunction(
+    const detected =
+    Runtime.addFunction(function(
 
-        function(
+        id,
 
-            id,
+        x1,y1,
+        x2,y2,
+        x3,y3,
+        x4,y4,
 
-            x1,y1,
-            x2,y2,
-            x3,y3,
-            x4,y4,
+        m00,m01,m02,
+        m10,m11,m12,
+        m20,m21,m22
 
-            m00,m01,m02,
-            m10,m11,m12,
-            m20,m21,m22
+    ){
 
+        detections.push({
+
+            id:id,
+
+            x1:x1,
+            y1:y1,
+
+            x2:x2,
+            y2:y2,
+
+            x3:x3,
+            y3:y3,
+
+            x4:x4,
+            y4:y4,
+
+            matrix:[
+                m00,m01,m02,
+                m10,m11,m12,
+                m20,m21,m22
+            ]
+
+        });
+
+    });
+
+
+    return function(source){
+
+        let sourceWidth =
+        source.videoWidth ||
+        source.width;
+
+        let sourceHeight =
+        source.videoHeight ||
+        source.height;
+
+
+        if(
+            !sourceWidth ||
+            !sourceHeight
         ){
+            return [];
+        }
 
-            detections.push({
 
-                id:id,
+        /*
+        Limite volontaire à 800 px,
+        comme dans l'exemple d'origine
+        du moteur Emscripten.
+        */
 
-                corners:[
+        let downscale = 1;
 
-                    {x:x1,y:y1},
-                    {x:x2,y:y2},
-                    {x:x3,y:y3},
-                    {x:x4,y:y4}
 
-                ],
+        if(sourceWidth > 800){
 
-                matrix:[
-                    m00,m01,m02,
-                    m10,m11,m12,
-                    m20,m21,m22
-                ]
-
-            });
+            downscale =
+            sourceWidth / 800;
 
         }
 
-    );
+
+        if(sourceHeight > 800){
+
+            downscale =
+            Math.max(
+                sourceHeight / 800,
+                downscale
+            );
+
+        }
 
 
-    detectorReady = true;
+        const width =
+        Math.floor(
+            sourceWidth / downscale
+        );
 
 
-    return function(canvas){
+        const height =
+        Math.floor(
+            sourceHeight / downscale
+        );
 
-        const ctx =
-        canvas.getContext(
-            "2d",
-            {
-                willReadFrequently:true
-            }
+
+        detectionCanvas.width =
+        width;
+
+        detectionCanvas.height =
+        height;
+
+
+        detectionCtx.drawImage(
+
+            source,
+
+            0,
+            0,
+
+            width,
+            height
+
         );
 
 
         const imageData =
-        ctx.getImageData(
+        detectionCtx.getImageData(
+
             0,
             0,
-            canvas.width,
-            canvas.height
+
+            width,
+            height
+
         );
 
 
-        const byteCount =
-        imageData.data.length;
-
-
         const buffer =
-        Module._malloc(byteCount);
+        Module._malloc(
+            imageData.data.length *
+            imageData.data.BYTES_PER_ELEMENT
+        );
 
 
         Module.HEAPU8.set(
@@ -429,31 +501,35 @@ function createAprilTagDetector(){
 
 
         detect(
-
-            detectedCallback,
-
-            canvas.width,
-
-            canvas.height,
-
+            detected,
+            width,
+            height,
             buffer
-
         );
 
 
         Module._free(buffer);
 
 
-        return detections.slice();
+        return {
+            detections:
+            detections.slice(),
+
+            width:
+            width,
+
+            height:
+            height
+        };
 
     };
 
 }
 
 
-/* =============================================
-   CANVAS DE DÉTECTION
-============================================= */
+/* ================================================
+   CANVAS DE CALCUL
+================================================ */
 
 const detectionCanvas =
 document.createElement("canvas");
@@ -467,9 +543,9 @@ detectionCanvas.getContext(
 );
 
 
-/* =============================================
-   INITIALISATION MOTEUR
-============================================= */
+/* ================================================
+   INITIALISATION APRILTAG
+================================================ */
 
 function initialiseDetector(){
 
@@ -479,15 +555,26 @@ function initialiseDetector(){
         createAprilTagDetector();
 
 
-        if(detector){
+        diagnostic.innerHTML =
 
-            diagnostic.innerHTML =
-            "<span class='ok'>" +
-            "MOTEUR APRILTAG : PRÊT" +
-            "</span><br>" +
-            "Famille : tag36h11";
+        "<span class='ok'>" +
+        "MOTEUR APRILTAG : PRÊT" +
+        "</span>" +
 
-        }
+        "<br>" +
+
+        "Famille : tag36h11" +
+
+        "<br>" +
+
+        "apriltag.js : chargé localement";
+
+
+        message(
+            "Moteur prêt",
+            "Vous pouvez démarrer la caméra.",
+            "ok"
+        );
 
     }
 
@@ -495,11 +582,26 @@ function initialiseDetector(){
 
         console.error(error);
 
+
+        detector = null;
+
+
         diagnostic.innerHTML =
+
         "<span class='error'>" +
-        "ERREUR MOTEUR APRILTAG" +
-        "</span><br>" +
+        "MOTEUR APRILTAG : ERREUR" +
+        "</span>" +
+
+        "<br>" +
+
         error.message;
+
+
+        message(
+            "Erreur AprilTag",
+            error.message,
+            "error"
+        );
 
     }
 
@@ -507,25 +609,76 @@ function initialiseDetector(){
 
 
 /*
-Le vieux module Emscripten est généralement
-initialisé immédiatement.
-
-On vérifie cependant après un petit délai.
+L'ancien moteur Emscripten peut demander
+un court délai avant d'être complètement
+initialisé.
 */
 
-setTimeout(
-    initialiseDetector,
-    600
-);
+function waitForAprilTag(attempt=0){
+
+    if(
+        typeof Module !== "undefined" &&
+        Module.cwrap &&
+        typeof Runtime !== "undefined" &&
+        Runtime.addFunction
+    ){
+
+        initialiseDetector();
+
+        return;
+    }
 
 
-/* =============================================
+    if(attempt > 40){
+
+        diagnostic.innerHTML =
+
+        "<span class='error'>" +
+        "MOTEUR APRILTAG : NON CHARGÉ" +
+        "</span>" +
+
+        "<br>" +
+
+        "Vérifiez que apriltag.js se trouve " +
+        "dans le même dossier que index.html.";
+
+
+        message(
+            "AprilTag indisponible",
+            "apriltag.js n'a pas pu être chargé.",
+            "error"
+        );
+
+        return;
+    }
+
+
+    setTimeout(
+        function(){
+
+            waitForAprilTag(
+                attempt + 1
+            );
+
+        },
+        250
+    );
+
+}
+
+
+waitForAprilTag();
+
+
+/* ================================================
    DÉMARRAGE CAMÉRA
-============================================= */
+================================================ */
 
 async function startCamera(){
 
-    startButton.disabled = true;
+    startButton.disabled =
+    true;
+
 
     message(
         "Demande caméra…",
@@ -611,30 +764,21 @@ async function startCamera(){
         await video.play();
 
 
-        /*
-        Attendre que Safari connaisse vraiment
-        la taille du flux vidéo.
-        */
+        if(!video.videoWidth){
 
-        await new Promise(resolve=>{
+            await new Promise(resolve=>{
 
-            if(video.videoWidth){
+                video.addEventListener(
+                    "loadedmetadata",
+                    resolve,
+                    {
+                        once:true
+                    }
+                );
 
-                resolve();
+            });
 
-                return;
-
-            }
-
-            video.addEventListener(
-                "loadedmetadata",
-                resolve,
-                {
-                    once:true
-                }
-            );
-
-        });
+        }
 
 
         configureViewer();
@@ -649,11 +793,16 @@ async function startCamera(){
         );
 
 
-        detectionRunning = true;
+        detectionRunning =
+        true;
 
-        totalFrames = 0;
 
-        detectedFrames = 0;
+        totalFrames =
+        0;
+
+
+        detectedFrames =
+        0;
 
 
         message(
@@ -670,7 +819,7 @@ async function startCamera(){
         }
 
 
-        detectorTimer =
+        detectionTimer =
         setInterval(
             processFrame,
             180
@@ -692,78 +841,52 @@ async function startCamera(){
         );
 
 
-        startButton.disabled = false;
+        startButton.disabled =
+        false;
 
     }
 
 }
 
 
-/* =============================================
-   CONFIGURATION AFFICHAGE
-============================================= */
+/* ================================================
+   DIMENSIONS
+================================================ */
 
 function configureViewer(){
 
-    const vw =
+    const width =
     video.videoWidth;
 
-    const vh =
+    const height =
     video.videoHeight;
 
 
-    if(!vw || !vh){
+    if(
+        !width ||
+        !height
+    ){
         return;
     }
 
 
-    /*
-    On adapte le cadre au vrai format caméra.
-    Ainsi le contour AprilTag reste aligné.
-    */
-
     viewer.style.aspectRatio =
-    vw + "/" + vh;
+    width + "/" + height;
 
 
     overlay.width =
-    vw;
+    width;
+
 
     overlay.height =
-    vh;
-
-
-    /*
-    Détection limitée à environ 640 px
-    pour préserver les performances iPad.
-    */
-
-    const maxDimension = 640;
-
-    const factor =
-    Math.min(
-        1,
-        maxDimension /
-        Math.max(vw,vh)
-    );
-
-
-    detectionCanvas.width =
-    Math.round(
-        vw * factor
-    );
-
-    detectionCanvas.height =
-    Math.round(
-        vh * factor
-    );
+    height;
 
 }
 
 
-/* =============================================
-   ANALYSE D'UNE IMAGE
-============================================= */
+/* ================================================
+   ANALYSE
+================================================ */
 
 function processFrame(){
 
@@ -781,26 +904,19 @@ function processFrame(){
         totalFrames++;
 
 
-        detectionCtx.drawImage(
-
-            video,
-
-            0,
-            0,
-
-            detectionCanvas.width,
-            detectionCanvas.height
-
-        );
+        const result =
+        detector(video);
 
 
         const tags =
-        detector(
-            detectionCanvas
+        result.detections;
+
+
+        drawDetections(
+            tags,
+            result.width,
+            result.height
         );
-
-
-        drawDetections(tags);
 
 
         if(tags.length > 0){
@@ -810,20 +926,16 @@ function processFrame(){
 
             const ids =
             tags
-            .map(tag=>tag.id)
+            .map(
+                tag => tag.id
+            )
             .join(", ");
 
 
             message(
-
                 "TAG DÉTECTÉ ✓",
-
-                tags.length +
-                " tag(s) — ID : " +
-                ids,
-
+                "ID : " + ids,
                 "ok"
-
             );
 
 
@@ -844,14 +956,19 @@ function processFrame(){
 
             "<br>" +
 
-            "Analyse : " +
-            detectionCanvas.width +
+            "Résolution analyse : " +
+            result.width +
             " × " +
-            detectionCanvas.height +
+            result.height +
 
             "<br>" +
 
-            "Détections : " +
+            "Images analysées : " +
+            totalFrames +
+
+            "<br>" +
+
+            "Images avec détection : " +
             detectedFrames;
 
         }
@@ -859,13 +976,9 @@ function processFrame(){
         else{
 
             message(
-
                 "Recherche AprilTag…",
-
                 "Aucun tag36h11 détecté.",
-
                 "warning"
-
             );
 
 
@@ -881,10 +994,10 @@ function processFrame(){
 
             "<br>" +
 
-            "Analyse : " +
-            detectionCanvas.width +
+            "Résolution analyse : " +
+            result.width +
             " × " +
-            detectionCanvas.height +
+            result.height +
 
             "<br>" +
 
@@ -898,8 +1011,15 @@ function processFrame(){
     catch(error){
 
         console.error(
-            "Erreur détection :",
+            "Erreur détection",
             error
+        );
+
+
+        message(
+            "Erreur détection",
+            error.message,
+            "error"
         );
 
 
@@ -907,23 +1027,30 @@ function processFrame(){
 
         "<span class='error'>" +
         "ERREUR DÉTECTION" +
-        "</span><br>" +
+        "</span>" +
+
+        "<br>" +
 
         error.message;
 
 
-        detectionRunning = false;
+        detectionRunning =
+        false;
 
     }
 
 }
 
 
-/* =============================================
-   DESSIN DES TAGS
-============================================= */
+/* ================================================
+   DESSIN
+================================================ */
 
-function drawDetections(tags){
+function drawDetections(
+    tags,
+    detectionWidth,
+    detectionHeight
+){
 
     overlayCtx.clearRect(
         0,
@@ -933,38 +1060,54 @@ function drawDetections(tags){
     );
 
 
-    if(!tags || !tags.length){
-
+    if(
+        !tags ||
+        tags.length === 0
+    ){
         return;
-
     }
 
 
     const scaleX =
     overlay.width /
-    detectionCanvas.width;
+    detectionWidth;
 
 
     const scaleY =
     overlay.height /
-    detectionCanvas.height;
+    detectionHeight;
 
 
     tags.forEach(tag=>{
 
-        const points =
-        tag.corners.map(p=>({
 
-            x:p.x * scaleX,
+        const points = [
 
-            y:p.y * scaleY
+            {
+                x:tag.x1 * scaleX,
+                y:tag.y1 * scaleY
+            },
 
-        }));
+            {
+                x:tag.x2 * scaleX,
+                y:tag.y2 * scaleY
+            },
 
+            {
+                x:tag.x3 * scaleX,
+                y:tag.y3 * scaleY
+            },
 
-        /* contour */
+            {
+                x:tag.x4 * scaleX,
+                y:tag.y4 * scaleY
+            }
+
+        ];
+
 
         overlayCtx.beginPath();
+
 
         overlayCtx.moveTo(
             points[0].x,
@@ -972,7 +1115,11 @@ function drawDetections(tags){
         );
 
 
-        for(let i=1;i<4;i++){
+        for(
+            let i=1;
+            i<4;
+            i++
+        ){
 
             overlayCtx.lineTo(
                 points[i].x,
@@ -985,17 +1132,18 @@ function drawDetections(tags){
         overlayCtx.closePath();
 
 
-        overlayCtx.lineWidth = 7;
+        overlayCtx.lineWidth =
+        6;
+
 
         overlayCtx.strokeStyle =
         "#39ff74";
 
+
         overlayCtx.stroke();
 
 
-        /* centre */
-
-        const cx =
+        const centerX =
         (
             points[0].x +
             points[1].x +
@@ -1004,7 +1152,7 @@ function drawDetections(tags){
         ) / 4;
 
 
-        const cy =
+        const centerY =
         (
             points[0].y +
             points[1].y +
@@ -1015,29 +1163,34 @@ function drawDetections(tags){
 
         overlayCtx.beginPath();
 
+
         overlayCtx.arc(
-            cx,
-            cy,
-            9,
+            centerX,
+            centerY,
+            8,
             0,
             Math.PI * 2
         );
 
+
         overlayCtx.fillStyle =
         "#ff3b30";
+
 
         overlayCtx.fill();
 
 
-        /* ID */
-
         overlayCtx.font =
         "bold 34px -apple-system";
 
-        overlayCtx.lineWidth = 7;
+
+        overlayCtx.lineWidth =
+        7;
+
 
         overlayCtx.strokeStyle =
         "#000";
+
 
         overlayCtx.strokeText(
 
@@ -1055,6 +1208,7 @@ function drawDetections(tags){
 
         overlayCtx.fillStyle =
         "#39ff74";
+
 
         overlayCtx.fillText(
 
@@ -1074,9 +1228,9 @@ function drawDetections(tags){
 }
 
 
-/* =============================================
+/* ================================================
    ARRÊT
-============================================= */
+================================================ */
 
 function stopCamera(){
 
@@ -1084,13 +1238,14 @@ function stopCamera(){
     false;
 
 
-    if(detectorTimer){
+    if(detectionTimer){
 
         clearInterval(
-            detectorTimer
+            detectionTimer
         );
 
-        detectorTimer =
+
+        detectionTimer =
         null;
 
     }
@@ -1109,13 +1264,15 @@ function stopCamera(){
         stream
         .getTracks()
         .forEach(
-            track=>track.stop()
+            track => track.stop()
         );
 
     }
 
 
-    stream = null;
+    stream =
+    null;
+
 
     video.srcObject =
     null;
@@ -1124,9 +1281,11 @@ function stopCamera(){
     startButton.disabled =
     false;
 
+
     startButton.classList.remove(
         "hidden"
     );
+
 
     stopButton.classList.add(
         "hidden"
@@ -1141,14 +1300,15 @@ function stopCamera(){
 }
 
 
-/* =============================================
+/* ================================================
    BOUTONS
-============================================= */
+================================================ */
 
 startButton.addEventListener(
     "click",
     startCamera
 );
+
 
 stopButton.addEventListener(
     "click",
@@ -1156,9 +1316,9 @@ stopButton.addEventListener(
 );
 
 
-/* =============================================
-   FERMETURE SAFARI
-============================================= */
+/* ================================================
+   SAFARI QUITTE LA PAGE
+================================================ */
 
 window.addEventListener(
     "pagehide",
