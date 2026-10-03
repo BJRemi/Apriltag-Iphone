@@ -1,165 +1,196 @@
 <!doctype html>
 <html lang="fr">
+
 <head>
 <meta charset="utf-8">
 
-<meta name="viewport"
-content="width=device-width,
-initial-scale=1,
-viewport-fit=cover,
-user-scalable=no">
+<meta
+    name="viewport"
+    content="width=device-width,
+             initial-scale=1,
+             viewport-fit=cover,
+             user-scalable=no"
+>
 
 <meta name="theme-color" content="#05070a">
 
-<title>AprilTag iPad V6</title>
+<title>AprilTag iPad V6.1</title>
 
 <style>
 
-*{
-    box-sizing:border-box;
+* {
+    box-sizing: border-box;
 }
 
-html,body{
-    margin:0;
-    width:100%;
-    min-height:100%;
-    background:#05070a;
-    color:white;
+html,
+body {
+    margin: 0;
+    width: 100%;
+    min-height: 100%;
+    background: #05070a;
+    color: white;
     font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "SF Pro Display",
-    system-ui,
-    sans-serif;
+        -apple-system,
+        BlinkMacSystemFont,
+        "SF Pro Display",
+        system-ui,
+        sans-serif;
 }
 
-body{
-    min-height:100svh;
+body {
+    min-height: 100svh;
 }
 
-.app{
-    width:100%;
-    max-width:900px;
-    margin:auto;
+.app {
+    width: 100%;
+    max-width: 900px;
+    margin: auto;
+
     padding:
         env(safe-area-inset-top)
         14px
         env(safe-area-inset-bottom);
 }
 
-h1{
-    font-size:22px;
-    margin:12px 0 4px;
+h1 {
+    font-size: 22px;
+    margin: 12px 0 4px;
 }
 
-.version{
-    color:#8f98a5;
-    font-size:13px;
-    margin-bottom:12px;
+.version {
+    color: #8f98a5;
+    font-size: 13px;
+    margin-bottom: 12px;
 }
 
-.viewer{
-    position:relative;
-    width:100%;
-    aspect-ratio:4/3;
-    overflow:hidden;
-    border-radius:20px;
-    background:#000;
-    border:1px solid #ffffff22;
+.viewer {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+
+    overflow: hidden;
+
+    border-radius: 20px;
+    background: #000;
+
+    border: 1px solid #ffffff22;
 }
 
 video,
-#overlay{
-    position:absolute;
-    inset:0;
-    width:100%;
-    height:100%;
+#overlay {
+    position: absolute;
+
+    inset: 0;
+
+    width: 100%;
+    height: 100%;
 }
 
-video{
-    object-fit:contain;
-    background:#000;
+video {
+    object-fit: contain;
+    background: black;
 }
 
-#overlay{
-    z-index:1;
-    pointer-events:none;
+#overlay {
+    z-index: 1;
+    pointer-events: none;
 }
 
-.message{
-    position:absolute;
-    z-index:2;
-    left:12px;
-    right:12px;
-    bottom:12px;
-    padding:14px;
-    background:#000c;
-    border-radius:14px;
-    border:1px solid #ffffff22;
-    backdrop-filter:blur(12px);
+.message {
+    position: absolute;
+
+    z-index: 2;
+
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+
+    padding: 14px;
+
+    background: #000c;
+
+    border-radius: 14px;
+
+    border: 1px solid #ffffff22;
+
+    backdrop-filter: blur(12px);
 }
 
-.status{
-    font-size:17px;
-    font-weight:700;
+.status {
+    font-size: 17px;
+    font-weight: 700;
 }
 
-.detail{
-    margin-top:5px;
-    font-size:13px;
-    color:#b6bec8;
+.detail {
+    margin-top: 5px;
+
+    font-size: 13px;
+
+    color: #b6bec8;
+
+    overflow-wrap: anywhere;
 }
 
-.buttons{
-    display:flex;
-    gap:10px;
-    margin-top:14px;
+.buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
 }
 
-button{
-    flex:1;
-    min-height:52px;
-    border:0;
-    border-radius:14px;
-    font-size:16px;
-    font-weight:700;
+button {
+    flex: 1;
+
+    min-height: 52px;
+
+    border: 0;
+    border-radius: 14px;
+
+    font-size: 16px;
+    font-weight: 700;
 }
 
-.start{
-    background:white;
-    color:#05070a;
+.start {
+    background: white;
+    color: #05070a;
 }
 
-.stop{
-    background:#20252d;
-    color:white;
-    border:1px solid #ffffff22;
+.stop {
+    background: #20252d;
+    color: white;
+    border: 1px solid #ffffff22;
 }
 
-.hidden{
-    display:none;
+.hidden {
+    display: none;
 }
 
-.info{
-    margin-top:14px;
-    padding:12px;
-    border-radius:14px;
-    background:#11161d;
-    font-size:13px;
-    line-height:1.55;
-    color:#b8c0cb;
+.info {
+    margin-top: 14px;
+
+    padding: 12px;
+
+    border-radius: 14px;
+
+    background: #11161d;
+
+    font-size: 13px;
+    line-height: 1.55;
+
+    color: #b8c0cb;
+
+    overflow-wrap: anywhere;
 }
 
-.ok{
-    color:#70e59b;
+.ok {
+    color: #70e59b;
 }
 
-.warning{
-    color:#ffd36b;
+.warning {
+    color: #ffd36b;
 }
 
-.error{
-    color:#ff7777;
+.error {
+    color: #ff7777;
 }
 
 </style>
@@ -170,81 +201,93 @@ button{
 
 <main class="app">
 
-<h1>AprilTag iPad</h1>
+    <h1>AprilTag iPad</h1>
 
-<div class="version">
-V6.0 — AprilTag 36h11 WASM
-</div>
+    <div class="version">
+        V6.1 — tag36h11 — test détection
+    </div>
 
 
-<div
-    id="viewer"
-    class="viewer">
+    <div
+        id="viewer"
+        class="viewer"
+    >
 
-    <video
-        id="camera"
-        autoplay
-        muted
-        playsinline>
-    </video>
+        <video
+            id="camera"
+            autoplay
+            muted
+            playsinline
+        ></video>
 
-    <canvas id="overlay"></canvas>
+        <canvas id="overlay"></canvas>
 
-    <div class="message">
 
-        <div
-            id="status"
-            class="status">
-            Moteur non chargé
-        </div>
+        <div class="message">
 
-        <div
-            id="detail"
-            class="detail">
-            Touchez « Démarrer caméra ».
+            <div
+                id="status"
+                class="status"
+            >
+                Prêt
+            </div>
+
+            <div
+                id="detail"
+                class="detail"
+            >
+                Touchez « Démarrer caméra ».
+            </div>
+
         </div>
 
     </div>
 
-</div>
+
+    <div class="buttons">
+
+        <button
+            id="start"
+            class="start"
+        >
+            Démarrer caméra
+        </button>
+
+        <button
+            id="stop"
+            class="stop hidden"
+        >
+            Arrêter
+        </button>
+
+    </div>
 
 
-<div class="buttons">
-
-<button
-    id="start"
-    class="start">
-    Démarrer caméra
-</button>
-
-<button
-    id="stop"
-    class="stop hidden">
-    Arrêter
-</button>
-
-</div>
-
-
-<div
-    id="diagnostic"
-    class="info">
-
-    V6 prête.<br>
-    Le moteur AprilTag sera chargé au démarrage.
-
-</div>
+    <div
+        id="diagnostic"
+        class="info"
+    >
+        V6.1 prête.<br>
+        Caméra + moteur AprilTag 36h11.
+    </div>
 
 </main>
 
 
 <canvas
     id="analysis"
-    style="display:none">
-</canvas>
+    style="display:none"
+></canvas>
 
 
 <script>
+
+"use strict";
+
+
+/* ============================================================
+   ÉLÉMENTS
+============================================================ */
 
 const video =
 document.getElementById("camera");
@@ -265,7 +308,7 @@ const analysisCtx =
 analysis.getContext(
     "2d",
     {
-        willReadFrequently:true
+        willReadFrequently: true
     }
 );
 
@@ -285,6 +328,10 @@ const diagnostic =
 document.getElementById("diagnostic");
 
 
+/* ============================================================
+   VARIABLES
+============================================================ */
+
 let stream = null;
 
 let detector = null;
@@ -295,427 +342,558 @@ let grayBuffer = null;
 
 let lastDetectionTime = 0;
 
+let detectionRunning = false;
 
-/* =====================================================
-   AFFICHAGE
-===================================================== */
+
+/* ============================================================
+   MESSAGES
+============================================================ */
 
 function setMessage(
     title,
     text,
-    type=""
-){
+    type = ""
+) {
 
     status.textContent =
-    title;
+        title;
 
     detail.textContent =
-    text;
+        text;
 
     status.className =
-    "status " + type;
-
+        "status " + type;
 }
 
 
-/* =====================================================
+function errorText(error) {
+
+    if (error === undefined) {
+        return "Erreur JavaScript : valeur undefined";
+    }
+
+    if (error === null) {
+        return "Erreur JavaScript : valeur null";
+    }
+
+    if (
+        typeof error === "string"
+    ) {
+        return error;
+    }
+
+    if (
+        error.message
+    ) {
+        return error.message;
+    }
+
+    try {
+
+        return JSON.stringify(
+            error
+        );
+
+    }
+    catch (_) {
+
+        return String(
+            error
+        );
+    }
+}
+
+
+/* ============================================================
    CHARGEMENT APRILTAG WASM
-===================================================== */
+============================================================ */
 
-async function loadAprilTag(){
+async function loadAprilTag() {
 
-    if(detector){
+    if (detector) {
+
         return detector;
     }
 
 
     setMessage(
         "Chargement AprilTag…",
-        "Initialisation du moteur WASM.",
+        "Initialisation du moteur tag36h11.",
         "warning"
     );
 
 
     diagnostic.innerHTML =
-    "Téléchargement du moteur AprilTag 36h11…";
+        "Téléchargement du moteur AprilTag…";
 
 
     return new Promise(
-    function(resolve,reject){
+        function(resolve, reject) {
+
+            const base =
+                "https://arenaxr.github.io/apriltag-js-standalone/";
 
 
-        const base =
-        "https://arenaxr.github.io/apriltag-js-standalone/";
+            window.AprilTagWasmModule = {
 
+                locateFile:
+                function(path) {
 
-        window.AprilTagWasmModule = {
-
-            locateFile:function(path){
-
-                return base + path;
-
-            }
-
-        };
-
-
-        const script =
-        document.createElement("script");
-
-
-        script.src =
-        base +
-        "apriltag_wasm.js";
-
-
-        script.onload =
-        function(){
-
-
-            try{
-
-
-                function getModulePromise(){
-
-                    const wasm =
-                    window.AprilTagWasm;
-
-
-                    if(
-                        typeof wasm ===
-                        "function"
-                    ){
-
-                        return wasm(
-                            window.AprilTagWasmModule
-                        );
-
-                    }
-
-
-                    if(
-                        wasm &&
-                        typeof wasm.then ===
-                        "function"
-                    ){
-
-                        return wasm;
-
-                    }
-
-
-                    return null;
-
+                    return base + path;
                 }
 
-
-                function initialise(
-                    Module
-                ){
-
-                    try{
+            };
 
 
-                        const init =
-                        Module.cwrap(
-                            "atagjs_init",
-                            "number",
-                            []
-                        );
+            const script =
+                document.createElement(
+                    "script"
+                );
 
 
-                        const options =
-                        Module.cwrap(
-                            "atagjs_set_detector_options",
-                            "number",
-                            [
-                                "number",
-                                "number",
-                                "number",
-                                "number",
-                                "number",
-                                "number",
-                                "number"
-                            ]
-                        );
+            script.src =
+                base +
+                "apriltag_wasm.js";
 
 
-                        const setImage =
-                        Module.cwrap(
-                            "atagjs_set_img_buffer",
-                            "number",
-                            [
-                                "number",
-                                "number",
-                                "number"
-                            ]
-                        );
+            script.onload =
+            function() {
+
+                try {
+
+                    function getModulePromise() {
+
+                        const wasm =
+                            window.AprilTagWasm;
 
 
-                        const detect =
-                        Module.cwrap(
-                            "atagjs_detect",
-                            "number",
-                            []
-                        );
+                        if (
+                            typeof wasm ===
+                            "function"
+                        ) {
+
+                            return wasm(
+                                window.AprilTagWasmModule
+                            );
+                        }
 
 
-                        init();
+                        if (
+                            wasm &&
+                            typeof wasm.then ===
+                            "function"
+                        ) {
+
+                            return wasm;
+                        }
 
 
-                        /*
-                        quad decimate = 2
-                        sharpen = 0
-                        threads = 1
-                        */
-
-                        options(
-                            2.0,
-                            0,
-                            1,
-                            1,
-                            0,
-                            0,
-                            0
-                        );
+                        return null;
+                    }
 
 
-                        detector = {
+                    function initialise(
+                        Module
+                    ) {
 
-                            detect:
-                            function(
-                                gray,
-                                width,
-                                height
-                            ){
+                        try {
 
-                                const buffer =
-                                setImage(
-                                    width,
-                                    height,
-                                    width
+                            if (!Module) {
+
+                                throw new Error(
+                                    "Module WebAssembly vide."
                                 );
-
-
-                                Module
-                                .HEAPU8
-                                .set(
-                                    gray,
-                                    buffer
-                                );
-
-
-                                const ptr =
-                                detect();
-
-
-                                const length =
-                                Module.getValue(
-                                    ptr,
-                                    "i32"
-                                );
-
-
-                                if(
-                                    length === 0
-                                ){
-
-                                    return [];
-
-                                }
-
-
-                                const stringPtr =
-                                Module.getValue(
-                                    ptr + 4,
-                                    "i32"
-                                );
-
-
-                                const bytes =
-                                new Uint8Array(
-
-                                    Module
-                                    .HEAP8
-                                    .buffer,
-
-                                    stringPtr,
-
-                                    length
-                                );
-
-
-                                let json = "";
-
-
-                                for(
-                                    let i=0;
-                                    i<length;
-                                    i++
-                                ){
-
-                                    json +=
-                                    String.fromCharCode(
-                                        bytes[i]
-                                    );
-
-                                }
-
-
-                                return JSON.parse(
-                                    json
-                                );
-
                             }
 
-                        };
+
+                            if (
+                                typeof Module.cwrap !==
+                                "function"
+                            ) {
+
+                                throw new Error(
+                                    "Module.cwrap indisponible."
+                                );
+                            }
 
 
-                        diagnostic.innerHTML =
-
-                        "<span class='ok'>" +
-                        "MOTEUR APRILTAG : PRÊT" +
-                        "</span>" +
-
-                        "<br>" +
-
-                        "Famille : tag36h11" +
-
-                        "<br>" +
-
-                        "WebAssembly : chargé";
+                            const init =
+                                Module.cwrap(
+                                    "atagjs_init",
+                                    "number",
+                                    []
+                                );
 
 
-                        resolve(
-                            detector
-                        );
+                            const options =
+                                Module.cwrap(
+                                    "atagjs_set_detector_options",
+                                    "number",
+                                    [
+                                        "number",
+                                        "number",
+                                        "number",
+                                        "number",
+                                        "number",
+                                        "number",
+                                        "number"
+                                    ]
+                                );
 
 
+                            const setImage =
+                                Module.cwrap(
+                                    "atagjs_set_img_buffer",
+                                    "number",
+                                    [
+                                        "number",
+                                        "number",
+                                        "number"
+                                    ]
+                                );
+
+
+                            const detectWasm =
+                                Module.cwrap(
+                                    "atagjs_detect",
+                                    "number",
+                                    []
+                                );
+
+
+                            init();
+
+
+                            /*
+                                quad_decimate
+                                quad_sigma
+                                nthreads
+                                refine_edges
+                                max_detections
+                                return_pose
+                                return_solutions
+
+                                Pour cette phase :
+                                uniquement détection 2D.
+                            */
+
+                            options(
+                                1.5,
+                                0,
+                                1,
+                                1,
+                                0,
+                                0,
+                                0
+                            );
+
+
+                            detector = {
+
+                                async detect(
+                                    gray,
+                                    width,
+                                    height
+                                ) {
+
+                                    const buffer =
+                                        setImage(
+                                            width,
+                                            height,
+                                            width
+                                        );
+
+
+                                    if (
+                                        !Number.isFinite(buffer) ||
+                                        buffer <= 0
+                                    ) {
+
+                                        throw new Error(
+                                            "Impossible de créer le buffer image WASM."
+                                        );
+                                    }
+
+
+                                    Module.HEAPU8.set(
+                                        gray,
+                                        buffer
+                                    );
+
+
+                                    const ptr =
+                                        detectWasm();
+
+
+                                    if (
+                                        !Number.isFinite(ptr) ||
+                                        ptr <= 0
+                                    ) {
+
+                                        return [];
+                                    }
+
+
+                                    const length =
+                                        Module.getValue(
+                                            ptr,
+                                            "i32"
+                                        );
+
+
+                                    if (
+                                        !Number.isFinite(length)
+                                    ) {
+
+                                        throw new Error(
+                                            "Longueur de résultat AprilTag invalide."
+                                        );
+                                    }
+
+
+                                    if (
+                                        length <= 0
+                                    ) {
+
+                                        return [];
+                                    }
+
+
+                                    const stringPtr =
+                                        Module.getValue(
+                                            ptr + 4,
+                                            "i32"
+                                        );
+
+
+                                    if (
+                                        !Number.isFinite(stringPtr) ||
+                                        stringPtr <= 0
+                                    ) {
+
+                                        throw new Error(
+                                            "Adresse du résultat AprilTag invalide."
+                                        );
+                                    }
+
+
+                                    const bytes =
+                                        new Uint8Array(
+                                            Module.HEAPU8.buffer,
+                                            stringPtr,
+                                            length
+                                        );
+
+
+                                    let json = "";
+
+
+                                    /*
+                                       TextDecoder est préférable
+                                       mais on garde un secours
+                                       compatible Safari.
+                                    */
+
+                                    if (
+                                        typeof TextDecoder !==
+                                        "undefined"
+                                    ) {
+
+                                        json =
+                                            new TextDecoder(
+                                                "utf-8"
+                                            )
+                                            .decode(
+                                                bytes
+                                            );
+
+                                    }
+                                    else {
+
+                                        for (
+                                            let i = 0;
+                                            i < length;
+                                            i++
+                                        ) {
+
+                                            json +=
+                                                String.fromCharCode(
+                                                    bytes[i]
+                                                );
+                                        }
+                                    }
+
+
+                                    if (!json) {
+
+                                        return [];
+                                    }
+
+
+                                    const result =
+                                        JSON.parse(
+                                            json
+                                        );
+
+
+                                    if (
+                                        !Array.isArray(result)
+                                    ) {
+
+                                        throw new Error(
+                                            "Le détecteur n'a pas renvoyé un tableau."
+                                        );
+                                    }
+
+
+                                    return result;
+                                }
+
+                            };
+
+
+                            diagnostic.innerHTML =
+
+                                "<span class='ok'>" +
+                                "MOTEUR APRILTAG : PRÊT" +
+                                "</span>" +
+
+                                "<br>" +
+
+                                "Famille : tag36h11" +
+
+                                "<br>" +
+
+                                "WebAssembly : chargé";
+
+
+                            resolve(
+                                detector
+                            );
+                        }
+
+                        catch(error) {
+
+                            reject(
+                                error
+                            );
+                        }
                     }
 
-                    catch(error){
 
-                        reject(
-                            error
-                        );
-
-                    }
-
-                }
-
-
-                const promise =
-                getModulePromise();
-
-
-                if(promise){
-
-                    promise
-                    .then(initialise)
-                    .catch(reject);
-
-                }
-
-                else{
-
-                    setTimeout(
-                    function(){
-
-                        const delayed =
+                    const promise =
                         getModulePromise();
 
 
-                        if(delayed){
+                    if (promise) {
 
-                            delayed
-                            .then(initialise)
-                            .catch(reject);
+                        Promise.resolve(
+                            promise
+                        )
+                        .then(
+                            initialise
+                        )
+                        .catch(
+                            reject
+                        );
 
-                        }
+                    }
+                    else {
 
-                        else{
+                        setTimeout(
+                            function() {
 
-                            reject(
-                                new Error(
-                                    "Module WASM introuvable."
-                                )
-                            );
+                                const delayed =
+                                    getModulePromise();
 
-                        }
 
-                    },
-                    200
-                    );
+                                if (delayed) {
+
+                                    Promise.resolve(
+                                        delayed
+                                    )
+                                    .then(
+                                        initialise
+                                    )
+                                    .catch(
+                                        reject
+                                    );
+
+                                }
+                                else {
+
+                                    reject(
+                                        new Error(
+                                            "Module WASM AprilTag introuvable."
+                                        )
+                                    );
+                                }
+
+                            },
+                            300
+                        );
+                    }
 
                 }
 
-            }
+                catch(error) {
 
-            catch(error){
+                    reject(
+                        error
+                    );
+                }
+            };
+
+
+            script.onerror =
+            function() {
 
                 reject(
-                    error
+                    new Error(
+                        "Impossible de télécharger apriltag_wasm.js"
+                    )
                 );
-
-            }
-
-        };
+            };
 
 
-        script.onerror =
-        function(){
-
-            reject(
-                new Error(
-                    "Impossible de télécharger apriltag_wasm.js"
-                )
+            document.head.appendChild(
+                script
             );
-
-        };
-
-
-        document.head.appendChild(
-            script
-        );
-
-    });
-
+        }
+    );
 }
 
 
-/* =====================================================
+/* ============================================================
    CAMÉRA
-===================================================== */
+============================================================ */
 
-async function startCamera(){
+async function startCamera() {
 
     startButton.disabled =
-    true;
+        true;
 
 
-    try{
+    try {
 
-
-        if(
+        if (
             !window.isSecureContext
-        ){
+        ) {
 
             throw new Error(
                 "Cette page doit être ouverte en HTTPS."
             );
-
         }
 
 
-        if(
+        if (
             !navigator.mediaDevices ||
             !navigator.mediaDevices.getUserMedia
-        ){
+        ) {
 
             throw new Error(
                 "API caméra non disponible."
             );
-
         }
 
 
@@ -730,33 +908,33 @@ async function startCamera(){
 
 
         stream =
-        await navigator
-        .mediaDevices
-        .getUserMedia({
+            await navigator
+            .mediaDevices
+            .getUserMedia({
 
-            audio:false,
+                audio: false,
 
-            video:{
+                video: {
 
-                facingMode:{
-                    ideal:"environment"
-                },
+                    facingMode: {
+                        ideal: "environment"
+                    },
 
-                width:{
-                    ideal:1280
-                },
+                    width: {
+                        ideal: 1280
+                    },
 
-                height:{
-                    ideal:720
+                    height: {
+                        ideal: 720
+                    }
+
                 }
 
-            }
-
-        });
+            });
 
 
         video.srcObject =
-        stream;
+            stream;
 
 
         await video.play();
@@ -790,13 +968,18 @@ async function startCamera(){
 
 
         animationId =
-        requestAnimationFrame(
-            scanFrame
-        );
+            requestAnimationFrame(
+                scanFrame
+            );
 
     }
 
-    catch(error){
+    catch(error) {
+
+        const message =
+            errorText(
+                error
+            );
 
 
         console.error(
@@ -806,251 +989,266 @@ async function startCamera(){
 
         setMessage(
             "Erreur",
-            error.message,
+            message,
             "error"
         );
 
 
         diagnostic.innerHTML =
 
-        "<span class='error'>" +
-        "ERREUR : " +
-        error.message +
-        "</span>";
+            "<span class='error'>" +
+            "ERREUR : " +
+            escapeHtml(message) +
+            "</span>";
 
 
         startButton.disabled =
-        false;
-
+            false;
     }
-
 }
 
 
-/* =====================================================
-   ATTENTE MÉTADONNÉES VIDÉO
-===================================================== */
+/* ============================================================
+   ATTENTE VIDÉO
+============================================================ */
 
-function waitForVideo(){
+function waitForVideo() {
 
     return new Promise(
-    function(resolve){
+        function(resolve) {
 
+            if (
+                video.videoWidth > 0 &&
+                video.videoHeight > 0
+            ) {
 
-        if(
-            video.videoWidth > 0
-        ){
+                resolve();
 
-            resolve();
-
-            return;
-
-        }
-
-
-        video.addEventListener(
-            "loadedmetadata",
-            resolve,
-            {
-                once:true
+                return;
             }
-        );
 
-    });
 
+            video.addEventListener(
+                "loadedmetadata",
+                resolve,
+                {
+                    once: true
+                }
+            );
+        }
+    );
 }
 
 
-/* =====================================================
-   DIMENSIONS
-===================================================== */
+/* ============================================================
+   CANVAS
+============================================================ */
 
-function configureCanvas(){
+function configureCanvas() {
 
     const width =
-    video.videoWidth;
+        video.videoWidth;
 
     const height =
-    video.videoHeight;
+        video.videoHeight;
 
 
     viewer.style.aspectRatio =
-    width + "/" + height;
+        width + "/" + height;
 
 
     /*
-    Résolution limitée volontairement
-    pour préserver les performances iPad.
+       On limite l'analyse pour préserver
+       les performances de Safari/iPad.
     */
 
     const maximum =
-    800;
+        800;
 
 
     const factor =
-    Math.min(
-        1,
-        maximum /
-        Math.max(
-            width,
-            height
-        )
-    );
+        Math.min(
+            1,
+            maximum /
+            Math.max(
+                width,
+                height
+            )
+        );
 
 
     analysis.width =
-    Math.round(
-        width * factor
-    );
+        Math.round(
+            width * factor
+        );
 
 
     analysis.height =
-    Math.round(
-        height * factor
-    );
+        Math.round(
+            height * factor
+        );
 
 
     overlay.width =
-    analysis.width;
-
+        analysis.width;
 
     overlay.height =
-    analysis.height;
+        analysis.height;
 
 
     grayBuffer =
-    new Uint8Array(
-        analysis.width *
-        analysis.height
-    );
+        new Uint8Array(
+            analysis.width *
+            analysis.height
+        );
 
 
     diagnostic.innerHTML =
 
-    "<span class='ok'>" +
-    "MOTEUR APRILTAG : PRÊT" +
-    "</span>" +
+        "<span class='ok'>" +
+        "CAMÉRA + APRILTAG : PRÊTS" +
+        "</span>" +
 
-    "<br>" +
+        "<br>" +
 
-    "Famille : tag36h11" +
+        "Famille : tag36h11" +
 
-    "<br>" +
+        "<br>" +
 
-    "Caméra : " +
-    width +
-    " × " +
-    height +
+        "Caméra : " +
+        width +
+        " × " +
+        height +
 
-    "<br>" +
+        "<br>" +
 
-    "Analyse : " +
-    analysis.width +
-    " × " +
-    analysis.height;
-
+        "Analyse : " +
+        analysis.width +
+        " × " +
+        analysis.height;
 }
 
 
-/* =====================================================
-   CONVERSION GRIS
-===================================================== */
+/* ============================================================
+   CONVERSION NIVEAUX DE GRIS
+============================================================ */
 
 function imageToGray(
     imageData
-){
+) {
 
     const data =
-    imageData.data;
+        imageData.data;
 
 
     let destinationIndex =
-    0;
+        0;
 
 
-    for(
-        let sourceIndex=0;
-        sourceIndex<data.length;
-        sourceIndex+=4
-    ){
+    for (
+        let sourceIndex = 0;
+        sourceIndex < data.length;
+        sourceIndex += 4
+    ) {
 
         const r =
-        data[sourceIndex];
+            data[
+                sourceIndex
+            ];
 
         const g =
-        data[sourceIndex+1];
+            data[
+                sourceIndex + 1
+            ];
 
         const b =
-        data[sourceIndex+2];
+            data[
+                sourceIndex + 2
+            ];
 
+
+        /*
+           Pondération luminance.
+           Plus propre que moyenne R/G/B.
+        */
 
         grayBuffer[
             destinationIndex
         ] =
-        (
-            r +
-            g +
-            b
-        ) / 3;
+            Math.round(
+                0.299 * r +
+                0.587 * g +
+                0.114 * b
+            );
 
 
         destinationIndex++;
-
     }
-
 }
 
 
-/* =====================================================
-   BOUCLE DE DÉTECTION
-===================================================== */
+/* ============================================================
+   DÉTECTION
+============================================================ */
 
-function scanFrame(
+async function scanFrame(
     timestamp
-){
+) {
 
     animationId =
-    requestAnimationFrame(
-        scanFrame
-    );
+        requestAnimationFrame(
+            scanFrame
+        );
 
 
-    if(
+    if (
         !stream ||
         !detector ||
         video.readyState < 2
-    ){
+    ) {
 
         return;
-
     }
 
 
     /*
-    environ 10 analyses par seconde
+       Évite deux détections WASM simultanées.
     */
 
-    if(
-        timestamp -
-        lastDetectionTime <
-        100
-    ){
+    if (
+        detectionRunning
+    ) {
 
         return;
+    }
 
+
+    /*
+       ~8 analyses par seconde.
+       Suffisant pour le test.
+    */
+
+    if (
+        timestamp -
+        lastDetectionTime <
+        125
+    ) {
+
+        return;
     }
 
 
     lastDetectionTime =
-    timestamp;
+        timestamp;
 
 
-    try{
+    detectionRunning =
+        true;
 
 
-        analysisCtx
-        .drawImage(
+    try {
 
+        analysisCtx.drawImage(
             video,
 
             0,
@@ -1058,21 +1256,16 @@ function scanFrame(
 
             analysis.width,
             analysis.height
-
         );
 
 
         const imageData =
-        analysisCtx
-        .getImageData(
-
-            0,
-            0,
-
-            analysis.width,
-            analysis.height
-
-        );
+            analysisCtx.getImageData(
+                0,
+                0,
+                analysis.width,
+                analysis.height
+            );
 
 
         imageToGray(
@@ -1080,16 +1273,22 @@ function scanFrame(
         );
 
 
+        /*
+           IMPORTANT :
+           on attend maintenant réellement
+           la réponse du détecteur.
+        */
+
         const markers =
-        detector.detect(
+            await detector.detect(
 
-            grayBuffer,
+                grayBuffer,
 
-            analysis.width,
+                analysis.width,
 
-            analysis.height
+                analysis.height
 
-        );
+            );
 
 
         drawMarkers(
@@ -1097,19 +1296,18 @@ function scanFrame(
         );
 
 
-        if(
+        if (
             markers &&
             markers.length > 0
-        ){
-
+        ) {
 
             const ids =
-            markers
-            .map(
-                marker =>
-                marker.id
-            )
-            .join(", ");
+                markers
+                .map(
+                    marker =>
+                        marker.id
+                )
+                .join(", ");
 
 
             setMessage(
@@ -1121,27 +1319,30 @@ function scanFrame(
 
             diagnostic.innerHTML =
 
-            "<span class='ok'>" +
-            "APRILTAG DÉTECTÉ" +
-            "</span>" +
+                "<span class='ok'>" +
+                "APRILTAG DÉTECTÉ" +
+                "</span>" +
 
-            "<br>" +
+                "<br>" +
 
-            "Famille : tag36h11" +
+                "Famille : tag36h11" +
 
-            "<br>" +
+                "<br>" +
 
-            "ID : " +
-            ids +
+                "ID : " +
+                ids +
 
-            "<br>" +
+                "<br>" +
 
-            "Nombre : " +
-            markers.length;
+                "Nombre : " +
+                markers.length;
 
         }
+        else {
 
-        else{
+            drawMarkers(
+                []
+            );
 
 
             setMessage(
@@ -1149,45 +1350,59 @@ function scanFrame(
                 "Aucun tag36h11 détecté.",
                 "warning"
             );
-
         }
 
     }
 
-    catch(error){
+    catch(error) {
+
+        const message =
+            errorText(
+                error
+            );
 
 
         console.error(
+            "Erreur détection :",
             error
         );
 
 
         setMessage(
             "Erreur détection",
-            error.message,
+            message,
             "error"
         );
 
 
         diagnostic.innerHTML =
 
-        "<span class='error'>" +
-        "ERREUR DÉTECTION : " +
-        error.message +
-        "</span>";
+            "<span class='error'>" +
+            "ERREUR DÉTECTION" +
+            "</span>" +
 
+            "<br>" +
+
+            escapeHtml(
+                message
+            );
     }
 
+    finally {
+
+        detectionRunning =
+            false;
+    }
 }
 
 
-/* =====================================================
-   DESSIN DES TAGS
-===================================================== */
+/* ============================================================
+   DESSIN TAGS
+============================================================ */
 
 function drawMarkers(
     markers
-){
+) {
 
     overlayCtx.clearRect(
         0,
@@ -1197,239 +1412,243 @@ function drawMarkers(
     );
 
 
-    if(
+    if (
         !markers ||
         markers.length === 0
-    ){
+    ) {
 
         return;
-
     }
 
 
     markers.forEach(
-    function(marker){
+        function(marker) {
+
+            const corners =
+                marker.corners;
 
 
-        const corners =
-        marker.corners;
+            if (
+                !corners ||
+                corners.length < 4
+            ) {
+
+                return;
+            }
 
 
-        if(
-            !corners ||
-            corners.length < 4
-        ){
+            /* CONTOUR */
 
-            return;
+            overlayCtx.beginPath();
 
-        }
-
-
-        /*
-        contour
-        */
-
-        overlayCtx
-        .beginPath();
-
-
-        overlayCtx
-        .moveTo(
-            corners[0].x,
-            corners[0].y
-        );
-
-
-        for(
-            let i=1;
-            i<4;
-            i++
-        ){
-
-            overlayCtx
-            .lineTo(
-                corners[i].x,
-                corners[i].y
+            overlayCtx.moveTo(
+                corners[0].x,
+                corners[0].y
             );
 
+
+            for (
+                let i = 1;
+                i < 4;
+                i++
+            ) {
+
+                overlayCtx.lineTo(
+                    corners[i].x,
+                    corners[i].y
+                );
+            }
+
+
+            overlayCtx.closePath();
+
+            overlayCtx.lineWidth =
+                5;
+
+            overlayCtx.strokeStyle =
+                "#39ff74";
+
+            overlayCtx.stroke();
+
+
+            /* COINS */
+
+            corners.forEach(
+                function(point) {
+
+                    overlayCtx.beginPath();
+
+                    overlayCtx.arc(
+                        point.x,
+                        point.y,
+                        6,
+                        0,
+                        Math.PI * 2
+                    );
+
+                    overlayCtx.fillStyle =
+                        "#00c8ff";
+
+                    overlayCtx.fill();
+                }
+            );
+
+
+            /* CENTRE */
+
+            let centerX;
+            let centerY;
+
+
+            if (
+                marker.center &&
+                Number.isFinite(
+                    marker.center.x
+                ) &&
+                Number.isFinite(
+                    marker.center.y
+                )
+            ) {
+
+                centerX =
+                    marker.center.x;
+
+                centerY =
+                    marker.center.y;
+
+            }
+            else {
+
+                centerX =
+                    (
+                        corners[0].x +
+                        corners[1].x +
+                        corners[2].x +
+                        corners[3].x
+                    ) / 4;
+
+
+                centerY =
+                    (
+                        corners[0].y +
+                        corners[1].y +
+                        corners[2].y +
+                        corners[3].y
+                    ) / 4;
+            }
+
+
+            overlayCtx.beginPath();
+
+            overlayCtx.arc(
+                centerX,
+                centerY,
+                8,
+                0,
+                Math.PI * 2
+            );
+
+            overlayCtx.fillStyle =
+                "#ff3b30";
+
+            overlayCtx.fill();
+
+
+            /* ID */
+
+            const label =
+                "ID " +
+                marker.id;
+
+
+            overlayCtx.font =
+                "bold 24px -apple-system";
+
+
+            const metrics =
+                overlayCtx.measureText(
+                    label
+                );
+
+
+            overlayCtx.fillStyle =
+                "rgba(0,0,0,.78)";
+
+
+            overlayCtx.fillRect(
+
+                centerX -
+                metrics.width / 2 -
+                8,
+
+                centerY - 44,
+
+                metrics.width + 16,
+
+                34
+            );
+
+
+            overlayCtx.fillStyle =
+                "#39ff74";
+
+
+            overlayCtx.textAlign =
+                "center";
+
+
+            overlayCtx.fillText(
+                label,
+                centerX,
+                centerY - 18
+            );
         }
-
-
-        overlayCtx
-        .closePath();
-
-
-        overlayCtx
-        .lineWidth =
-        5;
-
-
-        overlayCtx
-        .strokeStyle =
-        "#39ff74";
-
-
-        overlayCtx
-        .stroke();
-
-
-        /*
-        centre
-        */
-
-        const centerX =
-        (
-            corners[0].x +
-            corners[1].x +
-            corners[2].x +
-            corners[3].x
-        ) / 4;
-
-
-        const centerY =
-        (
-            corners[0].y +
-            corners[1].y +
-            corners[2].y +
-            corners[3].y
-        ) / 4;
-
-
-        overlayCtx
-        .beginPath();
-
-
-        overlayCtx
-        .arc(
-            centerX,
-            centerY,
-            7,
-            0,
-            Math.PI*2
-        );
-
-
-        overlayCtx
-        .fillStyle =
-        "#ff3b30";
-
-
-        overlayCtx
-        .fill();
-
-
-        /*
-        ID
-        */
-
-        overlayCtx.font =
-        "bold 24px -apple-system";
-
-
-        const label =
-        "ID " +
-        marker.id;
-
-
-        const metrics =
-        overlayCtx
-        .measureText(
-            label
-        );
-
-
-        overlayCtx
-        .fillStyle =
-        "rgba(0,0,0,.75)";
-
-
-        overlayCtx
-        .fillRect(
-
-            centerX -
-            metrics.width/2 -
-            6,
-
-            centerY -
-            20,
-
-            metrics.width +
-            12,
-
-            30
-
-        );
-
-
-        overlayCtx
-        .fillStyle =
-        "#39ff74";
-
-
-        overlayCtx
-        .textAlign =
-        "center";
-
-
-        overlayCtx
-        .fillText(
-
-            label,
-
-            centerX,
-
-            centerY + 4
-
-        );
-
-    });
-
+    );
 }
 
 
-/* =====================================================
+/* ============================================================
    ARRÊT
-===================================================== */
+============================================================ */
 
-function stopCamera(){
+function stopCamera() {
 
-    if(
+    if (
         animationId
-    ){
+    ) {
 
         cancelAnimationFrame(
             animationId
         );
 
         animationId =
-        null;
-
+            null;
     }
 
 
-    if(
+    if (
         stream
-    ){
+    ) {
 
         stream
         .getTracks()
         .forEach(
-            function(track){
+            function(track) {
 
                 track.stop();
-
             }
         );
-
     }
 
 
     stream =
-    null;
-
+        null;
 
     video.srcObject =
-    null;
+        null;
+
+    detectionRunning =
+        false;
 
 
     overlayCtx.clearRect(
@@ -1441,7 +1660,7 @@ function stopCamera(){
 
 
     startButton.disabled =
-    false;
+        false;
 
 
     startButton
@@ -1462,13 +1681,46 @@ function stopCamera(){
         "Caméra arrêtée",
         "Touchez Démarrer caméra pour reprendre."
     );
-
 }
 
 
-/* =====================================================
+/* ============================================================
+   SÉCURITÉ HTML DIAGNOSTIC
+============================================================ */
+
+function escapeHtml(
+    value
+) {
+
+    return String(
+        value
+    )
+    .replaceAll(
+        "&",
+        "&amp;"
+    )
+    .replaceAll(
+        "<",
+        "&lt;"
+    )
+    .replaceAll(
+        ">",
+        "&gt;"
+    )
+    .replaceAll(
+        '"',
+        "&quot;"
+    )
+    .replaceAll(
+        "'",
+        "&#039;"
+    );
+}
+
+
+/* ============================================================
    BOUTONS
-===================================================== */
+============================================================ */
 
 startButton.addEventListener(
     "click",
