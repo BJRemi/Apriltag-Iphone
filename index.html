@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V8.1</title>
+<title>AprilTag iPad V8.6</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -145,6 +145,10 @@ button:disabled { opacity: .32; }
 .start { background: var(--text); color: var(--bg); border-color: transparent; }
 .record.locked { background: var(--good); color: var(--bg); border-color: transparent; }
 
+.auto.on { color: var(--good); }
+.export.main { flex: 2; }
+.export.main:not(:disabled) { background: var(--text); color: var(--bg); border-color: transparent; }
+
 .hidden { display: none; }
 
 .pose-grid {
@@ -211,8 +215,13 @@ button:disabled { opacity: .32; }
 
     <div class="buttons">
         <button id="record" class="record" disabled>Enregistrer la position</button>
-        <button id="exportA" class="export" disabled>Exporter A</button>
-        <button id="exportB" class="export" disabled>Exporter B</button>
+        <button id="auto" class="auto on">Validation auto : oui</button>
+    </div>
+
+    <div class="buttons">
+        <button id="exportAll" class="export main" disabled>Exporter les STL</button>
+        <button id="exportA" class="export" disabled>A seul</button>
+        <button id="exportB" class="export" disabled>B seul</button>
     </div>
 
     <div class="pose-grid">
@@ -237,17 +246,21 @@ button:disabled { opacity: .32; }
    CONFIGURATION V8.0
 
    Valeurs provisoires à confirmer physiquement :
-   - Tag : 40 mm
+   - Tag : 8 mm de carré noir + 1 mm de marge blanche
+   - Cube : 10 mm d'arête
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V8.1";
+const VERSION = "V8.6";
 
-const TAG_SIZE_M = 0.040;
+const TAG_SIZE_M = 0.008;             // côté du carré noir du tag (sans la marge blanche)
 const CAMERA_HFOV_DEG = 65;
 
 /* Résolution d'analyse limitée pour préserver Safari/iPad. */
-const ANALYSIS_MAX_SIZE = 800;
+const ANALYSIS_MAX_SIZE = 1280;        // tags de 8 mm : il faut une image fine
+const CAMERA_IDEAL_WIDTH = 1920;
+const CAMERA_IDEAL_HEIGHT = 1080;
+const QUAD_DECIMATE = 1.0;             // 1 = pleine résolution (plus lent, plus précis)
 const DETECTION_INTERVAL_MS = 125;   // environ 8 analyses / seconde
 
 /* tag36h11 possède 587 IDs (0 à 586), tous supposés de même taille. */
@@ -255,8 +268,24 @@ const MAX_TAG_ID_TO_CONFIGURE = 586;
 
 const CENTER_SMOOTHING_ALPHA = 0.22;
 const FRAME_SMOOTHING_ALPHA = 0.18;
-const CENTER_OUTLIER_THRESHOLD_M = 0.012;
+const CENTER_OUTLIER_RATIO = 0.20;       // écart toléré entre faces, en fraction de l'arête
 const POSE_HOLD_MS = 500;
+
+/*
+  VALIDATION AUTOMATIQUE
+  La position de B par rapport à A est observée sur une fenêtre glissante.
+  Quand elle ne bouge presque plus, la fenêtre la plus stable est retenue
+  et sa moyenne est enregistrée.
+*/
+const AUTO_WINDOW = 12;              // nombre de mesures dans la fenêtre
+const AUTO_MAX_SPREAD_MM = 0.4;      // dispersion maximale en position
+const AUTO_MAX_SPREAD_DEG = 2.0;     // dispersion maximale en orientation
+const AUTO_PATIENCE = 4;             // mesures sans amélioration avant de valider
+const AUTO_MAX_WAIT = 24;            // mesures stables au plus avant de valider
+
+/* Au-delà de ce nombre de triangles, l'affichage utilise une version
+   allégée du STL. L'export garde toujours le fichier complet. */
+const STL_DISPLAY_MAX_TRIANGLES = 6000;
 
 const STL_SCALE_TO_M = 0.001;        // coordonnées STL en mm -> mètres
 
@@ -271,7 +300,7 @@ const STL_LIGHT_DIR = (function() {
     return [v[0] / n, v[1] / n, v[2] / n];
 })();
 
-const AXIS_LENGTH_M = 0.030;         // longueur des axes X / Y / Z dessinés
+const AXIS_LENGTH_RATIO = 1.5;        // longueur des axes dessinés, en fraction de l'arête
 
 /* Netteté du dessin : pixels de dessin par pixel d'analyse (calculé au démarrage). */
 const OVERLAY_MAX_SCALE = 2;
@@ -292,18 +321,18 @@ const OVERLAY_MAX_SCALE = 2;
 const CUBE_CONFIGS = [
     {
         key: "A",
-        faces: { xPlus: 2, yPlus: 4, zPlus: 7 },
-        edgeM: 0.060,
-        stlName: "interface multi.stl",
-        stlOffsetM: [0, 0, -0.050],
+        faces: { xPlus: 4, yPlus: 2, zPlus: 7 },      // ID 4 à gauche, ID 2 à droite, ID 7 dessus
+        edgeM: 0.010,
+        stlName: "IOC-A.stl",
+        stlOffsetM: [0, 0, -0.010],
         color: [125, 211, 252]
     },
     {
         key: "B",
-        faces: { xPlus: 12, yPlus: 14, zPlus: 17 },
-        edgeM: 0.060,
-        stlName: "interface multi.stl",   // à remplacer par le second STL
-        stlOffsetM: [0, 0, -0.050],
+        faces: { xPlus: 14, yPlus: 12, zPlus: 17 },
+        edgeM: 0.010,
+        stlName: "IOC-A.stl",             // à remplacer si le cube B porte un autre STL
+        stlOffsetM: [0, 0, -0.010],
         color: [253, 186, 116]
     }
 ];
@@ -323,6 +352,8 @@ const analysisCtx = analysis.getContext("2d", { willReadFrequently: true });
 const startButton = document.getElementById("start");
 const stopButton = document.getElementById("stop");
 const recordButton = document.getElementById("record");
+const autoButton = document.getElementById("auto");
+const exportAllButton = document.getElementById("exportAll");
 const exportAButton = document.getElementById("exportA");
 const exportBButton = document.getElementById("exportB");
 
@@ -362,6 +393,15 @@ let overlayScale = 1;
 /* Position relative enregistrée (B dans le repère du cube A), ou null. */
 let recorded = null;
 let lastLiveRel = null;
+
+/* Validation automatique */
+let autoEnabled = true;
+let autoArmed = true;        // désarmée après une libération, jusqu'au prochain mouvement
+let relBuffer = [];
+let stability = null;        // statistiques de la fenêtre courante
+let bestWindow = null;
+let stableCount = 0;
+let sinceBest = 0;
 
 function makeCube(config) {
     return {
@@ -597,7 +637,7 @@ async function loadAprilTag() {
 
                         /* quad_decimate, quad_sigma, nthreads, refine_edges,
                            max_detections, return_pose = 1, return_solutions = 0 */
-                        options(1.5, 0, 1, 1, 0, 1, 0);
+                        options(QUAD_DECIMATE, 0, 1, 1, 0, 1, 0);
 
                         for (let id = 0; id <= MAX_TAG_ID_TO_CONFIGURE; id++) {
                             setTagSize(id, TAG_SIZE_M);
@@ -718,8 +758,8 @@ async function startCamera() {
             audio: false,
             video: {
                 facingMode: { ideal: "environment" },
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
+                width: { ideal: CAMERA_IDEAL_WIDTH },
+                height: { ideal: CAMERA_IDEAL_HEIGHT }
             }
         });
 
@@ -860,7 +900,7 @@ function estimateCubeCenter(cube, markers) {
 
     if (candidates.length >= 3) {
         accepted = candidates.filter(c =>
-            vecLength(vecSub(c.point, consensus)) <= CENTER_OUTLIER_THRESHOLD_M
+            vecLength(vecSub(c.point, consensus)) <= cube.edgeM * CENTER_OUTLIER_RATIO
         );
         if (!accepted.length) accepted = candidates;
     }
@@ -988,9 +1028,9 @@ function updateSmoothedCenter(cube, rawCenter) {
 
 function stabilityLabel(stabilityMm) {
     if (stabilityMm === null || !Number.isFinite(stabilityMm)) return "—";
-    if (stabilityMm < 1.5) return "très stable";
-    if (stabilityMm < 4) return "stable";
-    if (stabilityMm < 8) return "moyen";
+    if (stabilityMm < 0.3) return "très stable";
+    if (stabilityMm < 0.8) return "stable";
+    if (stabilityMm < 2) return "moyen";
     return "instable";
 }
 
@@ -1137,6 +1177,17 @@ function parseBinarySTL(arrayBuffer) {
         offset += 2;                           // attribut ignoré
     }
 
+    return {
+        count,
+        vertsMm,                                   // maillage complet, pour l'export
+        view: makeViewMesh(simplifyForDisplay(vertsMm, count))
+    };
+}
+
+/* Tableaux de travail pour dessiner un maillage. */
+function makeViewMesh(vertsMm) {
+    const count = vertsMm.length / 9;
+
     /* Normale de chaque triangle, pour l'éclairage. */
     const normals = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
@@ -1163,6 +1214,87 @@ function parseBinarySTL(arrayBuffer) {
     };
 }
 
+/*
+  Allège un maillage trop dense pour l'affichage : les sommets voisins
+  sont regroupés sur une grille, les triangles devenus plats sont retirés.
+  La grille est agrandie jusqu'à passer sous STL_DISPLAY_MAX_TRIANGLES.
+*/
+function simplifyForDisplay(vertsMm, count) {
+    if (count <= STL_DISPLAY_MAX_TRIANGLES) return vertsMm;
+
+    const min = [Infinity, Infinity, Infinity];
+    const max = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < vertsMm.length; i++) {
+        const a = i % 3;
+        if (vertsMm[i] < min[a]) min[a] = vertsMm[i];
+        if (vertsMm[i] > max[a]) max[a] = vertsMm[i];
+    }
+
+    const size = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]) || 1;
+    let cell = size / 96;
+    let result = vertsMm;
+
+    for (let attempt = 0; attempt < 12; attempt++) {
+        const cells = new Map();          // cellule -> [somme x, somme y, somme z, nombre, indice]
+        const ids = new Uint32Array(count * 3);
+        let next = 0;
+
+        for (let v = 0; v < count * 3; v++) {
+            const p = v * 3;
+            const key =
+                Math.floor((vertsMm[p] - min[0]) / cell) + "," +
+                Math.floor((vertsMm[p + 1] - min[1]) / cell) + "," +
+                Math.floor((vertsMm[p + 2] - min[2]) / cell);
+            let entry = cells.get(key);
+            if (!entry) {
+                entry = [0, 0, 0, 0, next++];
+                cells.set(key, entry);
+            }
+            entry[0] += vertsMm[p];
+            entry[1] += vertsMm[p + 1];
+            entry[2] += vertsMm[p + 2];
+            entry[3]++;
+            ids[v] = entry[4];
+        }
+
+        const points = new Float32Array(next * 3);
+        for (const entry of cells.values()) {
+            points[entry[4] * 3] = entry[0] / entry[3];
+            points[entry[4] * 3 + 1] = entry[1] / entry[3];
+            points[entry[4] * 3 + 2] = entry[2] / entry[3];
+        }
+
+        const out = [];
+        const seen = new Set();
+        for (let i = 0; i < count; i++) {
+            const a = ids[i * 3], b = ids[i * 3 + 1], c = ids[i * 3 + 2];
+            if (a === b || b === c || a === c) continue;
+
+            /* Même triangle déjà gardé (même sens de rotation) ? */
+            const m = Math.min(a, b, c);
+            const key = m === a ? a + "," + b + "," + c
+                      : m === b ? b + "," + c + "," + a
+                      : c + "," + a + "," + b;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            out.push(a, b, c);
+        }
+
+        result = new Float32Array(out.length * 3);
+        for (let i = 0; i < out.length; i++) {
+            result[i * 3] = points[out[i] * 3];
+            result[i * 3 + 1] = points[out[i] * 3 + 1];
+            result[i * 3 + 2] = points[out[i] * 3 + 2];
+        }
+
+        if (result.length / 9 <= STL_DISPLAY_MAX_TRIANGLES) break;
+        cell *= 1.3;
+    }
+
+    return result;
+}
+
 const meshCache = new Map();    // nom de fichier -> Promise<mesh>
 
 function loadMesh(name) {
@@ -1185,7 +1317,11 @@ async function loadCubeSTL(cube) {
     cube.stlState = "chargement…";
     try {
         cube.mesh = await loadMesh(cube.stlName);
-        cube.stlState = cube.mesh.count + " triangles";
+        cube.stlState =
+            cube.mesh.count + " triangles" +
+            (cube.mesh.view.count < cube.mesh.count
+                ? " (" + cube.mesh.view.count + " affichés)"
+                : "");
     }
     catch (error) {
         console.error("Chargement STL " + cube.key + " :", error);
@@ -1222,8 +1358,8 @@ function stlPalette(cube) {
 }
 
 function drawSTL(cube, frame) {
-    const mesh = cube.mesh;
-    if (!mesh || !frame || !cameraModel || !overlay.width) return;
+    if (!cube.mesh || !frame || !cameraModel || !overlay.width) return;
+    const mesh = cube.mesh.view;
 
     if (!stlLayer) {
         stlLayer = document.createElement("canvas");
@@ -1352,18 +1488,21 @@ function drawSTL(cube, frame) {
    - STL B : sommets déplacés selon la position relative enregistrée.
 ============================================================ */
 
-function buildBinarySTL(mesh, transform, headerText) {
-    const buffer = new ArrayBuffer(84 + mesh.count * 50);
+/* parts : liste de [mesh, transform ou null] réunis dans un seul fichier. */
+function buildBinarySTL(parts, headerText) {
+    const total = parts.reduce((sum, part) => sum + part[0].count, 0);
+    const buffer = new ArrayBuffer(84 + total * 50);
     const view = new DataView(buffer);
 
     for (let i = 0; i < Math.min(80, headerText.length); i++) {
         view.setUint8(i, headerText.charCodeAt(i) & 0x7f);
     }
-    view.setUint32(80, mesh.count, true);
+    view.setUint32(80, total, true);
 
-    const v = mesh.vertsMm;
     let offset = 84;
 
+    for (const [mesh, transform] of parts) {
+    const v = mesh.vertsMm;
     for (let i = 0; i < mesh.count; i++) {
         const k = i * 9;
         let a = [v[k], v[k + 1], v[k + 2]];
@@ -1388,6 +1527,7 @@ function buildBinarySTL(mesh, transform, headerText) {
         }
         view.setUint16(offset, 0, true);
         offset += 2;
+    }
     }
 
     return buffer;
@@ -1439,13 +1579,12 @@ function exportCube(cube) {
     let fileName;
 
     if (cube === cubeA) {
-        buffer = buildBinarySTL(cube.mesh, null, "AprilTag " + VERSION + " STL A reference");
+        buffer = buildBinarySTL([[cube.mesh, null]], "AprilTag " + VERSION + " STL A reference");
         fileName = base + "_A_reference.stl";
     }
     else {
         buffer = buildBinarySTL(
-            cube.mesh,
-            makeBToATransform(recorded.rel),
+            [[cube.mesh, makeBToATransform(recorded.rel)]],
             "AprilTag " + VERSION + " STL B positionne par rapport a A"
         );
         fileName = base + "_B_positionne.stl";
@@ -1456,6 +1595,148 @@ function exportCube(cube) {
 }
 
 
+/* Les deux STL réunis dans un seul fichier, B placé par rapport à A. */
+function exportAll() {
+    if (!recorded || !cubeA.mesh || !cubeB.mesh) {
+        setMessage("Export impossible", "Il faut une position enregistrée et les deux STL chargés.", "warning");
+        return;
+    }
+
+    const buffer = buildBinarySTL(
+        [[cubeA.mesh, null], [cubeB.mesh, makeBToATransform(recorded.rel)]],
+        "AprilTag " + VERSION + " STL A + B positionnes"
+    );
+    const fileName = "ensemble_A_B_positionne.stl";
+
+    downloadBuffer(buffer, fileName);
+    setMessage("Export des STL ✓", fileName, "ok");
+}
+
+
+/* ============================================================
+   VALIDATION AUTOMATIQUE DE LA POSITION
+============================================================ */
+
+function averageRel(samples) {
+    let t = [0, 0, 0];
+    let x = [0, 0, 0];
+    let z = [0, 0, 0];
+
+    for (const sample of samples) {
+        t = vecAdd(t, sample.t);
+        x = vecAdd(x, sample.x);
+        z = vecAdd(z, sample.z);
+    }
+
+    x = vecNormalize(x);
+    z = orthoNormalize(z, x);
+    if (!z) return null;
+
+    return { x, y: vecCross(z, x), z, t: vecScale(t, 1 / samples.length) };
+}
+
+/* Moyenne et dispersion d'une série de positions relatives. */
+function windowStats(samples) {
+    const mean = averageRel(samples);
+    if (!mean) return null;
+
+    let squares = 0;
+    let spreadDeg = 0;
+
+    for (const sample of samples) {
+        const d = vecLength(vecSub(sample.t, mean.t)) * 1000;
+        squares += d * d;
+        spreadDeg = Math.max(spreadDeg, rotationAngleDeg(sample, mean));
+    }
+
+    const spreadMm = Math.sqrt(squares / samples.length);
+
+    return {
+        mean,
+        spreadMm,
+        spreadDeg,
+        score: spreadMm / AUTO_MAX_SPREAD_MM + spreadDeg / AUTO_MAX_SPREAD_DEG
+    };
+}
+
+function resetStability() {
+    relBuffer = [];
+    stability = null;
+    bestWindow = null;
+    stableCount = 0;
+    sinceBest = 0;
+}
+
+function lockPosition(stats, auto) {
+    recorded = {
+        rel: stats.mean,
+        spreadMm: stats.spreadMm,
+        spreadDeg: stats.spreadDeg,
+        auto
+    };
+    resetStability();
+}
+
+/* Appelée à chaque analyse d'image. */
+function updateStability() {
+    if (recorded) return;
+
+    const fresh = lastLiveRel && !cubeA.held && !cubeB.held;
+    if (!fresh) {
+        resetStability();
+        return;
+    }
+
+    relBuffer.push(lastLiveRel);
+    if (relBuffer.length > AUTO_WINDOW) relBuffer.shift();
+    if (relBuffer.length < AUTO_WINDOW) {
+        stability = null;
+        return;
+    }
+
+    const stats = windowStats(relBuffer);
+    stability = stats;
+    if (!stats) return;
+
+    const stable =
+        stats.spreadMm <= AUTO_MAX_SPREAD_MM &&
+        stats.spreadDeg <= AUTO_MAX_SPREAD_DEG;
+
+    if (!stable) {
+        bestWindow = null;
+        stableCount = 0;
+        sinceBest = 0;
+        if (stats.score > 4) autoArmed = true;     // les cubes ont bougé : on réarme
+        return;
+    }
+
+    if (!autoEnabled || !autoArmed) return;
+
+    /* Stable : on attend encore un peu pour retenir la meilleure fenêtre. */
+    stableCount++;
+    if (!bestWindow || stats.score < bestWindow.score) {
+        bestWindow = stats;
+        sinceBest = 0;
+    }
+    else {
+        sinceBest++;
+    }
+
+    if (sinceBest >= AUTO_PATIENCE || stableCount >= AUTO_MAX_WAIT) {
+        lockPosition(bestWindow, true);
+    }
+}
+
+function toggleAuto() {
+    autoEnabled = !autoEnabled;
+    autoArmed = true;
+    bestWindow = null;
+    stableCount = 0;
+    sinceBest = 0;
+    updateButtonsAndGrid();
+}
+
+
 /* ============================================================
    ENREGISTREMENT DE LA POSITION
 ============================================================ */
@@ -1463,10 +1744,22 @@ function exportCube(cube) {
 function toggleRecord() {
     if (recorded) {
         recorded = null;
+        autoArmed = false;       // pas de nouvelle validation tant que rien n'a bougé
+        resetStability();
         if (!stream) setMessage("Position libérée", "Démarrez la caméra pour un nouvel enregistrement.");
     }
+    else if (stability) {
+        /* Moyenne des dernières mesures, plus fiable qu'une seule image. */
+        lockPosition(stability, false);
+    }
     else if (cubeA.frame && cubeB.frame) {
-        recorded = { rel: relativePose(cubeA.frame, cubeB.frame) };
+        recorded = {
+            rel: relativePose(cubeA.frame, cubeB.frame),
+            spreadMm: null,
+            spreadDeg: null,
+            auto: false
+        };
+        resetStability();
     }
     updateButtonsAndGrid();
 }
@@ -1491,6 +1784,10 @@ function updateButtonsAndGrid() {
     recordButton.className = recorded ? "record locked" : "record";
     recordButton.disabled = !recorded && !lastLiveRel;
 
+    autoButton.textContent = "Validation auto : " + (autoEnabled ? "oui" : "non");
+    autoButton.className = autoEnabled ? "auto on" : "auto";
+
+    exportAllButton.disabled = !recorded || !cubeA.mesh || !cubeB.mesh;
     exportAButton.disabled = !recorded || !cubeA.mesh;
     exportBButton.disabled = !recorded || !cubeB.mesh;
 }
@@ -1523,6 +1820,8 @@ async function scanFrame(timestamp) {
         lastLiveRel = (cubeA.frame && cubeB.frame)
             ? relativePose(cubeA.frame, cubeB.frame)
             : null;
+
+        updateStability();
 
         drawScene(markers);
         updateButtonsAndGrid();
@@ -1559,7 +1858,7 @@ function updateStatus(markers) {
 
     if (recorded) {
         setMessage(
-            "Position enregistrée",
+            recorded.auto ? "Position validée automatiquement" : "Position enregistrée",
             a ? "STL B fixé par rapport au cube A. Vous pouvez exporter."
               : "Présentez le cube A pour revoir les deux STL. Vous pouvez exporter.",
             "ok"
@@ -1568,7 +1867,13 @@ function updateStatus(markers) {
     else if (a && b) {
         setMessage(
             "2 cubes suivis",
-            "Touchez « Enregistrer la position » quand le placement est bon.",
+            !autoEnabled
+                ? "Touchez « Enregistrer la position » quand le placement est bon."
+                : !autoArmed
+                    ? "Validation auto en pause : déplacez un cube pour la relancer."
+                    : bestWindow
+                        ? "Position stable, validation en cours…"
+                        : "Gardez les deux cubes immobiles pour la validation automatique.",
             "ok"
         );
     }
@@ -1623,6 +1928,24 @@ function updateStatus(markers) {
         lines.push(
             (recorded ? "<span class='ok'>Position enregistrée</span>" : "Position en direct") +
             " — distance entre centres : " + (vecLength(shown.t) * 1000).toFixed(1) + " mm"
+        );
+    }
+
+    if (recorded && recorded.spreadMm !== null) {
+        lines.push(
+            "Dispersion à l'enregistrement : " +
+            recorded.spreadMm.toFixed(2) + " mm • " + recorded.spreadDeg.toFixed(2) + "°" +
+            " (moyenne de " + AUTO_WINDOW + " mesures)"
+        );
+    }
+
+    if (!recorded && lastLiveRel) {
+        lines.push(
+            stability
+                ? "Stabilité actuelle : " +
+                  stability.spreadMm.toFixed(2) + " mm • " + stability.spreadDeg.toFixed(2) + "°" +
+                  " (seuils : " + AUTO_MAX_SPREAD_MM + " mm • " + AUTO_MAX_SPREAD_DEG + "°)"
+                : "Stabilité : mesure en cours (" + relBuffer.length + " / " + AUTO_WINDOW + ")"
         );
     }
 
@@ -1719,13 +2042,12 @@ function drawScene(markers) {
 
     for (const cube of cubes) {
         if (cube.frame) {
-            const box = drawCubeBox(cube, cube.frame);
-            drawCubeAxes(cube.frame);
-            if (box) {
+            const top = drawCubeAxes(cube.frame, cube.edgeM * AXIS_LENGTH_RATIO);
+            if (top) {
                 drawPill(
                     "Cube " + cube.key + (cube.held ? " · maintenu" : ""),
-                    (box.minX + box.maxX) / 2,
-                    box.minY - 16,
+                    top.x,
+                    top.y - 24,
                     cubeColor(cube)
                 );
             }
@@ -1746,59 +2068,12 @@ function drawScene(markers) {
     }
 }
 
-/* Arêtes du cube. Les trois arêtes cachées sont dessinées plus discrètement. */
-function drawCubeBox(cube, frame) {
-    const h = cube.edgeM / 2;
-    const cam = [];
-    const pts = [];
-
-    for (let i = 0; i < 8; i++) {
-        const local = [(i & 1 ? h : -h), (i & 2 ? h : -h), (i & 4 ? h : -h)];
-        const c = framePointToCamera(frame, local);
-        const p = project3D(c);
-        if (!p) return null;
-        cam.push(c);
-        pts.push(p);
-    }
-
-    let far = 0;
-    for (let i = 1; i < 8; i++) if (cam[i][2] > cam[far][2]) far = i;
-
-    const ctx = overlayCtx;
-    ctx.save();
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    for (const hidden of [true, false]) {
-        ctx.beginPath();
-        for (let i = 0; i < 8; i++) {
-            for (const bit of [1, 2, 4]) {
-                const j = i | bit;
-                if (j === i) continue;
-                if ((i === far || j === far) !== hidden) continue;
-                ctx.moveTo(pts[i].x, pts[i].y);
-                ctx.lineTo(pts[j].x, pts[j].y);
-            }
-        }
-        ctx.lineWidth = hidden ? 1 : 1.6;
-        ctx.setLineDash(hidden ? [4, 4] : []);
-        ctx.strokeStyle = cubeColor(cube, hidden ? 0.35 : 0.95);
-        ctx.stroke();
-    }
-
-    ctx.restore();
-
-    return {
-        minX: Math.min(...pts.map(p => p.x)),
-        maxX: Math.max(...pts.map(p => p.x)),
-        minY: Math.min(...pts.map(p => p.y)),
-        maxY: Math.max(...pts.map(p => p.y))
-    };
-}
-
-function drawCubeAxes(frame) {
+/* Repère X / Y / Z du cube. Renvoie le point le plus haut du dessin. */
+function drawCubeAxes(frame, length) {
     const origin2D = project3D(frame.origin);
-    if (!origin2D) return;
+    if (!origin2D) return null;
+
+    let top = origin2D;
 
     const ctx = overlayCtx;
     const axes = [["X", frame.x], ["Y", frame.y], ["Z", frame.z]];
@@ -1810,8 +2085,9 @@ function drawCubeAxes(frame) {
     ctx.textBaseline = "middle";
 
     for (const [name, vector] of axes) {
-        const tip = project3D(vecAdd(frame.origin, vecScale(vector, AXIS_LENGTH_M)));
+        const tip = project3D(vecAdd(frame.origin, vecScale(vector, length)));
         if (!tip) continue;
+        if (tip.y < top.y) top = tip;
 
         ctx.beginPath();
         ctx.moveTo(origin2D.x, origin2D.y);
@@ -1833,6 +2109,8 @@ function drawCubeAxes(frame) {
     ctx.fillStyle = "#ffffff";
     ctx.fill();
     ctx.restore();
+
+    return top;
 }
 
 /* Tag détecté : quatre équerres aux coins et le numéro au centre. */
@@ -1896,6 +2174,7 @@ function stopCamera() {
     video.srcObject = null;
     detectionRunning = false;
     lastLiveRel = null;
+    resetStability();
 
     for (const cube of cubes) resetCubeTracking(cube);
 
@@ -1923,6 +2202,8 @@ function stopCamera() {
 startButton.addEventListener("click", startCamera);
 stopButton.addEventListener("click", stopCamera);
 recordButton.addEventListener("click", toggleRecord);
+autoButton.addEventListener("click", toggleAuto);
+exportAllButton.addEventListener("click", exportAll);
 exportAButton.addEventListener("click", function() { exportCube(cubeA); });
 exportBButton.addEventListener("click", function() { exportCube(cubeB); });
 window.addEventListener("pagehide", stopCamera);
