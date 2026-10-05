@@ -1,1940 +1,481 @@
 <!doctype html>
-
-
-
 <html lang="fr">
-
-
-
 <head>
-
-
-
 <meta charset="utf-8">
-
-
-
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-
-
-
-<meta name="theme-color" content="#05070a">
-
-
-
-<title>AprilTag iPad V7.2</title>
-
-
-
-
-
-
+<meta name="theme-color" content="#0a0a0c">
+<title>AprilTag iPad V8.1</title>
 
 <style>
-
-
-
 * { box-sizing: border-box; }
 
-
-
-
-
-
-
-html, body {
-
-
-
-    margin: 0;
-
-
-
-    width: 100%;
-
-
-
-    min-height: 100%;
-
-
-
-    background: #05070a;
-
-
-
-    color: white;
-
-
-
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
-
-
-
+:root {
+    --bg: #0a0a0c;
+    --panel: #151518;
+    --line: rgba(255, 255, 255, .09);
+    --text: #f4f4f5;
+    --muted: #8b8b93;
+    --a: #7dd3fc;
+    --b: #fdba74;
+    --good: #86efac;
+    --warn: #fcd34d;
+    --bad: #fca5a5;
 }
 
-
-
-
-
-
+html, body {
+    margin: 0;
+    width: 100%;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
 
 body { min-height: 100svh; }
 
-
-
-
-
-
-
 .app {
-
-
-
     width: 100%;
-
-
-
     max-width: 900px;
-
-
-
     margin: auto;
-
-
-
-    padding: env(safe-area-inset-top) 14px env(safe-area-inset-bottom);
-
-
-
+    padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 16px);
 }
 
-
-
-
-
-
-
-h1 {
-
-
-
-    font-size: 22px;
-
-
-
-    margin: 12px 0 4px;
-
-
-
+header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 14px 2px 12px;
 }
 
-
-
-
-
-
-
-.version {
-
-
-
-    color: #8f98a5;
-
-
-
-    font-size: 13px;
-
-
-
-    margin-bottom: 12px;
-
-
-
-}
-
-
-
-
-
-
+h1 { font-size: 19px; font-weight: 650; letter-spacing: -.01em; margin: 0; }
+.version { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
 .viewer {
-
-
-
     position: relative;
-
-
-
     width: 100%;
-
-
-
     aspect-ratio: 4 / 3;
-
-
-
     overflow: hidden;
-
-
-
-    border-radius: 20px;
-
-
-
+    border-radius: 22px;
     background: #000;
-
-
-
-    border: 1px solid #ffffff22;
-
-
-
+    border: 1px solid var(--line);
 }
 
+video, #overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
+video { object-fit: contain; background: #000; }
+#overlay { z-index: 1; pointer-events: none; }
 
-
-
-
-
-
-video, #overlay {
-
-
-
+/* Bandeau d'état posé sur la vidéo */
+.hud {
     position: absolute;
-
-
-
-    inset: 0;
-
-
-
-    width: 100%;
-
-
-
-    height: 100%;
-
-
-
-}
-
-
-
-
-
-
-
-video {
-
-
-
-    object-fit: contain;
-
-
-
-    background: black;
-
-
-
-}
-
-
-
-
-
-
-
-#overlay {
-
-
-
-    z-index: 1;
-
-
-
-    pointer-events: none;
-
-
-
-}
-
-
-
-
-
-
-
-.message {
-
-
-
-    position: absolute;
-
-
-
     z-index: 2;
-
-
-
+    top: 12px;
     left: 12px;
-
-
-
     right: 12px;
-
-
-
-    bottom: 12px;
-
-
-
-    padding: 14px;
-
-
-
-    background: #000c;
-
-
-
-    border-radius: 14px;
-
-
-
-    border: 1px solid #ffffff22;
-
-
-
-    backdrop-filter: blur(12px);
-
-
-
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    pointer-events: none;
 }
 
-
-
-
-
-
+.status, .detail {
+    max-width: 100%;
+    background: rgba(10, 10, 12, .58);
+    border: 1px solid var(--line);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    backdrop-filter: blur(16px) saturate(1.4);
+    overflow-wrap: anywhere;
+}
 
 .status {
-
-
-
-    font-size: 17px;
-
-
-
-    font-weight: 700;
-
-
-
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 13px 7px 11px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
 }
 
+.status::before {
+    content: "";
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+}
 
+.status.ok, .status.warning, .status.error { color: var(--text); }
 
-
-
-
+.status.ok::before { background: var(--good); box-shadow: 0 0 10px var(--good); }
+.status.warning::before { background: var(--warn); }
+.status.error::before { background: var(--bad); }
 
 .detail {
-
-
-
-    margin-top: 5px;
-
-
-
-    font-size: 13px;
-
-
-
-    color: #b6bec8;
-
-
-
-    overflow-wrap: anywhere;
-
-
-
+    padding: 6px 11px;
+    border-radius: 12px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, .78);
 }
 
+.detail:empty { display: none; }
 
-
-
-
-
-
-.buttons {
-
-
-
-    display: flex;
-
-
-
-    gap: 10px;
-
-
-
-    margin-top: 14px;
-
-
-
-}
-
-
-
-
-
-
+.buttons { display: flex; gap: 10px; margin-top: 10px; }
 
 button {
-
-
-
     flex: 1;
-
-
-
-    min-height: 52px;
-
-
-
-    border: 0;
-
-
-
-    border-radius: 14px;
-
-
-
-    font-size: 16px;
-
-
-
-    font-weight: 700;
-
-
-
+    min-height: 50px;
+    border: 1px solid var(--line);
+    border-radius: 15px;
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    transition: opacity .15s, transform .1s;
 }
 
+button:active { transform: scale(.98); }
+button:disabled { opacity: .32; }
 
-
-
-
-
-
-.start {
-
-
-
-    background: white;
-
-
-
-    color: #05070a;
-
-
-
-}
-
-
-
-
-
-
-
-.stop {
-
-
-
-    background: #20252d;
-
-
-
-    color: white;
-
-
-
-    border: 1px solid #ffffff22;
-
-
-
-}
-
-
-
-
-
-
+.start { background: var(--text); color: var(--bg); border-color: transparent; }
+.record.locked { background: var(--good); color: var(--bg); border-color: transparent; }
 
 .hidden { display: none; }
 
+.pose-grid {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--line);
+    border: 1px solid var(--line);
+}
 
-
-
-
-
+.pose-box { padding: 11px 8px; background: var(--panel); text-align: center; }
+.pose-label { font-size: 11px; color: var(--muted); }
+.pose-value {
+    margin-top: 3px;
+    font-size: 16px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
 
 .info {
-
-
-
-    margin-top: 14px;
-
-
-
-    padding: 12px;
-
-
-
-    border-radius: 14px;
-
-
-
-    background: #11161d;
-
-
-
-    font-size: 13px;
-
-
-
-    line-height: 1.55;
-
-
-
-    color: #b8c0cb;
-
-
-
+    margin-top: 12px;
+    padding: 13px 14px;
+    border-radius: 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: #b4b4bd;
     overflow-wrap: anywhere;
-
-
-
 }
 
-
-
-
-
-
-
-.pose-grid {
-
-
-
-    margin-top: 10px;
-
-
-
-    display: grid;
-
-
-
-    grid-template-columns: repeat(3, 1fr);
-
-
-
-    gap: 8px;
-
-
-
-}
-
-
-
-
-
-
-
-.pose-box {
-
-
-
-    padding: 10px;
-
-
-
-    border-radius: 12px;
-
-
-
-    background: #0b1016;
-
-
-
-    border: 1px solid #ffffff14;
-
-
-
-    text-align: center;
-
-
-
-}
-
-
-
-
-
-
-
-.pose-label {
-
-
-
-    font-size: 11px;
-
-
-
-    color: #8f98a5;
-
-
-
-}
-
-
-
-
-
-
-
-.pose-value {
-
-
-
-    margin-top: 3px;
-
-
-
-    font-size: 17px;
-
-
-
-    font-weight: 750;
-
-
-
-}
-
-
-
-
-
-
-
-.ok { color: #70e59b; }
-
-
-
-.warning { color: #ffd36b; }
-
-
-
-.error { color: #ff7777; }
-
-
-
+.ok { color: var(--good); }
+.warning { color: var(--warn); }
+.error { color: var(--bad); }
+.cubeA { color: var(--a); font-weight: 650; }
+.cubeB { color: var(--b); font-weight: 650; }
 </style>
-
-
-
 </head>
 
-
-
-
-
-
-
 <body>
-
-
-
 <main class="app">
 
-
-
-
-
-
-
-    <h1>AprilTag iPad</h1>
-
-
-
-
-
-
-
-    <div class="version">
-
-
-
-        V7.2 — suivi AprilTag + STL externe
-
-
-
-    </div>
-
-
-
-
-
-
+    <header>
+        <h1>AprilTag iPad</h1>
+        <div id="version" class="version"></div>
+    </header>
 
     <div id="viewer" class="viewer">
-
-
-
-
-
-
-
-        <video
-
-
-
-            id="camera"
-
-
-
-            autoplay
-
-
-
-            muted
-
-
-
-            playsinline
-
-
-
-        ></video>
-
-
-
-
-
-
-
+        <video id="camera" autoplay muted playsinline></video>
         <canvas id="overlay"></canvas>
-
-
-
-
-
-
-
-        <div class="message">
-
-
-
+        <div class="hud">
             <div id="status" class="status">Prêt</div>
-
-
-
-            <div id="detail" class="detail">
-
-
-
-                Touchez « Démarrer caméra ».
-
-
-
-            </div>
-
-
-
+            <div id="detail" class="detail">Touchez « Démarrer caméra ».</div>
         </div>
-
-
-
     </div>
-
-
-
-
-
-
 
     <div class="buttons">
-
-
-
-
-
-
-
-        <button
-
-
-
-            id="start"
-
-
-
-            class="start"
-
-
-
-        >
-
-
-
-            Démarrer caméra
-
-
-
-        </button>
-
-
-
-
-
-
-
-        <button
-
-
-
-            id="stop"
-
-
-
-            class="stop hidden"
-
-
-
-        >
-
-
-
-            Arrêter
-
-
-
-        </button>
-
-
-
+        <button id="start" class="start">Démarrer caméra</button>
+        <button id="stop" class="stop hidden">Arrêter</button>
     </div>
 
-
-
-
-
-
-
-    <div id="diagnostic" class="info">
-
-
-
-        V7.1 prête.<br>
-
-
-
-        Détection + estimation de pose 3D AprilTag.
-
-
-
+    <div class="buttons">
+        <button id="record" class="record" disabled>Enregistrer la position</button>
+        <button id="exportA" class="export" disabled>Exporter A</button>
+        <button id="exportB" class="export" disabled>Exporter B</button>
     </div>
-
-
-
-
-
-
 
     <div class="pose-grid">
+        <div class="pose-box"><div class="pose-label">ΔX B / A</div><div id="relX" class="pose-value">—</div></div>
+        <div class="pose-box"><div class="pose-label">ΔY B / A</div><div id="relY" class="pose-value">—</div></div>
+        <div class="pose-box"><div class="pose-label">ΔZ B / A</div><div id="relZ" class="pose-value">—</div></div>
+        <div class="pose-box"><div class="pose-label">Roll B / A</div><div id="relRoll" class="pose-value">—</div></div>
+        <div class="pose-box"><div class="pose-label">Pitch B / A</div><div id="relPitch" class="pose-value">—</div></div>
+        <div class="pose-box"><div class="pose-label">Yaw B / A</div><div id="relYaw" class="pose-value">—</div></div>
+    </div>
 
-
-
-        <div class="pose-box">
-
-
-
-            <div class="pose-label">X cube</div>
-
-
-
-            <div id="poseX" class="pose-value">—</div>
-
-
-
-        </div>
-
-
-
-        <div class="pose-box">
-
-
-
-            <div class="pose-label">Y cube</div>
-
-
-
-            <div id="poseY" class="pose-value">—</div>
-
-
-
-        </div>
-
-
-
-        <div class="pose-box">
-
-
-
-            <div class="pose-label">Z / distance</div>
-
-
-
-            <div id="poseZ" class="pose-value">—</div>
-
-
-
-        </div>
-
-
-
-
-
-        <div class="pose-box">
-
-            <div class="pose-label">Roll</div>
-
-            <div id="poseRoll" class="pose-value">—</div>
-
-        </div>
-
-        <div class="pose-box">
-
-            <div class="pose-label">Pitch</div>
-
-            <div id="posePitch" class="pose-value">—</div>
-
-        </div>
-
-        <div class="pose-box">
-
-            <div class="pose-label">Yaw</div>
-
-            <div id="poseYaw" class="pose-value">—</div>
-
-        </div>
-
-</div>
-
-
-
-
-
-
+    <div id="diagnostic" class="info"></div>
 
 </main>
 
-
-
-
-
-
-
-<canvas
-
-
-
-    id="analysis"
-
-
-
-    style="display:none"
-
-
-
-></canvas>
-
-
-
-
-
-
+<canvas id="analysis" style="display:none"></canvas>
 
 <script>
-
-
-
 "use strict";
 
-
-
-
-
-
-
 /* ============================================================
+   CONFIGURATION V8.0
 
-
-
-   CONFIGURATION V7.1
-
-
-
-
-
-
-
-   IMPORTANT :
-
-
-
-   Valeurs provisoires à confirmer physiquement.
-
-
-
+   Valeurs provisoires à confirmer physiquement :
    - Tag : 40 mm
-
-
-
-   - Cube : 60 mm
-
-
-
    - HFOV caméra : 65°
-
-
-
 ============================================================ */
 
-
-
-
-
-
+const VERSION = "V8.1";
 
 const TAG_SIZE_M = 0.040;
-
-
-
-const CUBE_EDGE_M = 0.060;
-
-
-
 const CAMERA_HFOV_DEG = 65;
 
+/* Résolution d'analyse limitée pour préserver Safari/iPad. */
+const ANALYSIS_MAX_SIZE = 800;
+const DETECTION_INTERVAL_MS = 125;   // environ 8 analyses / seconde
 
-
-
-
-
-
-/*
-
-
-
-  Les IDs du cube sont supposés avoir tous la même taille.
-
-
-
-  tag36h11 possède 587 IDs (0 à 586).
-
-
-
-*/
-
-
-
+/* tag36h11 possède 587 IDs (0 à 586), tous supposés de même taille. */
 const MAX_TAG_ID_TO_CONFIGURE = 586;
-
-
-
-
-
-
-
-/* Lissage du centre du cube */
-
-
 
 const CENTER_SMOOTHING_ALPHA = 0.22;
 const FRAME_SMOOTHING_ALPHA = 0.18;
 const CENTER_OUTLIER_THRESHOLD_M = 0.012;
 const POSE_HOLD_MS = 500;
-const TRACKED_CUBE_IDS = new Set([2, 4, 7]);
 
-/* STL externe : origine 50 mm sous le centre du cube.
-   +Z STL aligné avec +Z cube (ID 7 vers le dessus). */
-const STL_OFFSET_M = [0, 0, -0.050];
-const STL_NAME = "interface multi.stl";
-const STL_SCALE_TO_M = 0.001; // coordonnées STL en mm -> mètres
-const STL_FILL_ALPHA = 0.16;
-const STL_STROKE_ALPHA = 0.52;
-let stlTriangles = null;
-let stlLoadPromise = null;
+const STL_SCALE_TO_M = 0.001;        // coordonnées STL en mm -> mètres
 
+/* Rendu du STL */
+const STL_ALPHA = 0.9;               // 1 = opaque, plus bas = plus transparent
+const STL_TINT = 0.30;               // part de la couleur du cube dans la teinte
+const STL_SHADE_LEVELS = 24;
+/* Direction vers la lumière, repère caméra (x à droite, y vers le bas, z devant). */
+const STL_LIGHT_DIR = (function() {
+    const v = [-0.35, -0.60, -0.72];
+    const n = Math.hypot(v[0], v[1], v[2]);
+    return [v[0] / n, v[1] / n, v[2] / n];
+})();
 
+const AXIS_LENGTH_M = 0.030;         // longueur des axes X / Y / Z dessinés
+
+/* Netteté du dessin : pixels de dessin par pixel d'analyse (calculé au démarrage). */
+const OVERLAY_MAX_SCALE = 2;
 
 /*
+  LES DEUX CUBES
 
-  Repère du cube utilisé pour la V7.0.
+  Pour chaque cube :
+  - faces    : ID du tag sur la face +X, +Y et +Z du repère du cube ;
+  - edgeM    : arête du cube en mètres ;
+  - stlName  : fichier STL (binaire, en mm) placé à côté de index.html ;
+  - stlOffsetM : position de l'origine du STL dans le repère du cube.
+                 Les axes du STL sont alignés sur ceux du cube.
 
-  Convention choisie :
-
-  - ID 2 : face +X (droite)
-
-  - ID 4 : face +Y (avant)
-
-  - ID 7 : face +Z (dessus)
-
-
-
-  Cette convention définit uniquement les axes du repère 3D du cube.
-
+  Le cube A sert de référence : à l'export, le STL A reste inchangé
+  et le STL B est replacé dans le système de coordonnées du STL A.
 */
+const CUBE_CONFIGS = [
+    {
+        key: "A",
+        faces: { xPlus: 2, yPlus: 4, zPlus: 7 },
+        edgeM: 0.060,
+        stlName: "interface multi.stl",
+        stlOffsetM: [0, 0, -0.050],
+        color: [125, 211, 252]
+    },
+    {
+        key: "B",
+        faces: { xPlus: 12, yPlus: 14, zPlus: 17 },
+        edgeM: 0.060,
+        stlName: "interface multi.stl",   // à remplacer par le second STL
+        stlOffsetM: [0, 0, -0.050],
+        color: [253, 186, 116]
+    }
+];
 
-const CUBE_FACE_IDS = {
 
-    xPlus: 2,
+/* ============================================================
+   ÉLÉMENTS
+============================================================ */
 
-    yPlus: 4,
+const video = document.getElementById("camera");
+const viewer = document.getElementById("viewer");
+const overlay = document.getElementById("overlay");
+const overlayCtx = overlay.getContext("2d");
+const analysis = document.getElementById("analysis");
+const analysisCtx = analysis.getContext("2d", { willReadFrequently: true });
 
-    zPlus: 7
+const startButton = document.getElementById("start");
+const stopButton = document.getElementById("stop");
+const recordButton = document.getElementById("record");
+const exportAButton = document.getElementById("exportA");
+const exportBButton = document.getElementById("exportB");
 
+const statusEl = document.getElementById("status");
+const detailEl = document.getElementById("detail");
+const diagnostic = document.getElementById("diagnostic");
+
+const relEls = {
+    x: document.getElementById("relX"),
+    y: document.getElementById("relY"),
+    z: document.getElementById("relZ"),
+    roll: document.getElementById("relRoll"),
+    pitch: document.getElementById("relPitch"),
+    yaw: document.getElementById("relYaw")
 };
 
+document.getElementById("version").textContent =
+    VERSION;
 
-
-
-
-
-
-
-
+diagnostic.innerHTML =
+    VERSION + " prête.<br>Suivi de deux cubes AprilTag avec STL liés.";
 
 
 /* ============================================================
-
-
-
-   ÉLÉMENTS
-
-
-
-============================================================ */
-
-
-
-
-
-
-
-const video =
-
-
-
-    document.getElementById("camera");
-
-
-
-
-
-
-
-const viewer =
-
-
-
-    document.getElementById("viewer");
-
-
-
-
-
-
-
-const overlay =
-
-
-
-    document.getElementById("overlay");
-
-
-
-
-
-
-
-const overlayCtx =
-
-
-
-    overlay.getContext("2d");
-
-
-
-
-
-
-
-const analysis =
-
-
-
-    document.getElementById("analysis");
-
-
-
-
-
-
-
-const analysisCtx =
-
-
-
-    analysis.getContext(
-
-
-
-        "2d",
-
-
-
-        {
-
-
-
-            willReadFrequently: true
-
-
-
-        }
-
-
-
-    );
-
-
-
-
-
-
-
-const startButton =
-
-
-
-    document.getElementById("start");
-
-
-
-
-
-
-
-const stopButton =
-
-
-
-    document.getElementById("stop");
-
-
-
-
-
-
-
-const status =
-
-
-
-    document.getElementById("status");
-
-
-
-
-
-
-
-const detail =
-
-
-
-    document.getElementById("detail");
-
-
-
-
-
-
-
-const diagnostic =
-
-
-
-    document.getElementById("diagnostic");
-
-
-
-
-
-
-
-const poseX =
-
-
-
-    document.getElementById("poseX");
-
-
-
-
-
-
-
-const poseY =
-
-
-
-    document.getElementById("poseY");
-
-
-
-
-
-
-
-const poseZ =
-
-
-
-    document.getElementById("poseZ");
-
-
-
-
-
-
-
-
-
-
-
-
-
-const poseRoll =
-
-    document.getElementById("poseRoll");
-
-
-
-const posePitch =
-
-    document.getElementById("posePitch");
-
-
-
-const poseYaw =
-
-    document.getElementById("poseYaw");
-
-
-
-
-
-/* ============================================================
-
-
-
    VARIABLES
-
-
-
 ============================================================ */
-
-
-
-
-
-
 
 let stream = null;
-
-
-
 let detector = null;
-
-
-
 let animationId = null;
-
-
-
 let grayBuffer = null;
-
-
-
 let lastDetectionTime = 0;
-
-
-
 let detectionRunning = false;
-
-
-
-
-
-
-
 let cameraModel = null;
+let overlayScale = 1;
 
+/* Position relative enregistrée (B dans le repère du cube A), ou null. */
+let recorded = null;
+let lastLiveRel = null;
 
+function makeCube(config) {
+    return {
+        ...config,
+        ids: new Set([config.faces.xPlus, config.faces.yPlus, config.faces.zPlus]),
+        ySign: 1,              // sens de la face +Y, appris quand 3 faces sont visibles
+        mesh: null,
+        palette: null,
+        stlState: "non chargé",
+        smoothedCenter: null,
+        lastRawCenter: null,
+        stabilityMm: null,
+        smoothedFrame: null,
+        lastGood: null,
+        estimate: null,
+        center: null,
+        frame: null,
+        held: false,
+        visibleIds: []
+    };
+}
 
+const cubes = CUBE_CONFIGS.map(makeCube);
+const cubeA = cubes[0];
+const cubeB = cubes[1];
 
+const cubeByTagId = new Map();
+for (const cube of cubes) {
+    for (const id of cube.ids) cubeByTagId.set(id, cube);
+}
 
-
-
-let smoothedCubeCenter = null;
-
-
-
-let previousCubeCenter = null;
-
-
-
-let stabilityMm = null;
-let lastRawCubeCenter = null;
-let smoothedCubeFrame = null;
-let lastGoodCubeCenter = null;
-let lastGoodCubeFrame = null;
-let lastGoodPoseTime = 0;
-let fusionStats = { accepted: 0, rejected: 0 };
-
-
-
-
-
-
-
-
-
-
-
-/* ============================================================
-
-
-
-   OUTILS UI
-
-
-
-============================================================ */
-
-
-
-
-
-
-
-function setMessage(
-
-
-
-    title,
-
-
-
-    text,
-
-
-
-    type = ""
-
-
-
-) {
-
-
-
-    status.textContent = title;
-
-
-
-    detail.textContent = text;
-
-
-
-    status.className = "status " + type;
-
-
-
+function resetCubeTracking(cube) {
+    cube.smoothedCenter = null;
+    cube.lastRawCenter = null;
+    cube.stabilityMm = null;
+    cube.smoothedFrame = null;
+    cube.lastGood = null;
+    cube.estimate = null;
+    cube.center = null;
+    cube.frame = null;
+    cube.held = false;
+    cube.visibleIds = [];
 }
 
 
+/* ============================================================
+   OUTILS UI
+============================================================ */
 
-
-
-
-
-
-
-
+function setMessage(title, text, type = "") {
+    statusEl.textContent = title;
+    detailEl.textContent = text;
+    statusEl.className = "status " + type;
+}
 
 function errorText(error) {
-
-
-
-
-
-
-
-    if (error === undefined) {
-
-
-
-        return "Erreur JavaScript : valeur undefined";
-
-
-
-    }
-
-
-
-
-
-
-
-    if (error === null) {
-
-
-
-        return "Erreur JavaScript : valeur null";
-
-
-
-    }
-
-
-
-
-
-
-
-    if (typeof error === "string") {
-
-
-
-        return error;
-
-
-
-    }
-
-
-
-
-
-
-
-    if (error.message) {
-
-
-
-        return error.message;
-
-
-
-    }
-
-
-
-
-
-
-
-    try {
-
-
-
-        return JSON.stringify(error);
-
-
-
-    }
-
-
-
-    catch (_) {
-
-
-
-        return String(error);
-
-
-
-    }
-
-
-
+    if (error === undefined) return "Erreur JavaScript : valeur undefined";
+    if (error === null) return "Erreur JavaScript : valeur null";
+    if (typeof error === "string") return error;
+    if (error.message) return error.message;
+    try { return JSON.stringify(error); }
+    catch (_) { return String(error); }
 }
-
-
-
-
-
-
-
-
-
-
 
 function escapeHtml(value) {
-
-
-
-
-
-
-
     return String(value)
-
-
-
         .replaceAll("&", "&amp;")
-
-
-
         .replaceAll("<", "&lt;")
-
-
-
         .replaceAll(">", "&gt;")
-
-
-
         .replaceAll('"', "&quot;")
-
-
-
         .replaceAll("'", "&#039;");
-
-
-
 }
-
-
-
-
-
-
-
-
-
 
 
 /* ============================================================
-
-
-
    PETITS OUTILS 3D
-
-
-
 ============================================================ */
 
-
-
-
-
-
-
-function vecAdd(a, b) {
-
-
-
-    return [
-
-
-
-        a[0] + b[0],
-
-
-
-        a[1] + b[1],
-
-
-
-        a[2] + b[2]
-
-
-
-    ];
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-function vecSub(a, b) {
-
-
-
-    return [
-
-
-
-        a[0] - b[0],
-
-
-
-        a[1] - b[1],
-
-
-
-        a[2] - b[2]
-
-
-
-    ];
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-function vecScale(v, s) {
-
-
-
-    return [
-
-
-
-        v[0] * s,
-
-
-
-        v[1] * s,
-
-
-
-        v[2] * s
-
-
-
-    ];
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-function vecLength(v) {
-
-
-
-    return Math.hypot(
-
-
-
-        v[0],
-
-
-
-        v[1],
-
-
-
-        v[2]
-
-
-
-    );
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-function vecDot(a, b) {
-
-    return (
-
-        a[0] * b[0] +
-
-        a[1] * b[1] +
-
-        a[2] * b[2]
-
-    );
-
-}
-
-
+function vecAdd(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
+function vecSub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+function vecScale(v, s) { return [v[0] * s, v[1] * s, v[2] * s]; }
+function vecLength(v) { return Math.hypot(v[0], v[1], v[2]); }
+function vecDot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
 function vecCross(a, b) {
-
     return [
-
         a[1] * b[2] - a[2] * b[1],
-
         a[2] * b[0] - a[0] * b[2],
-
         a[0] * b[1] - a[1] * b[0]
-
     ];
-
 }
-
-
-
-
 
 function vecNormalize(v) {
-
-
-
-
-
-
-
-    const length =
-
-
-
-        vecLength(v);
-
-
-
-
-
-
-
-    if (!Number.isFinite(length) || length < 1e-9) {
-
-
-
-        return [0, 0, 1];
-
-
-
-    }
-
-
-
-
-
-
-
-    return vecScale(
-
-
-
-        v,
-
-
-
-        1 / length
-
-
-
-    );
-
-
-
+    const length = vecLength(v);
+    if (!Number.isFinite(length) || length < 1e-9) return [0, 0, 1];
+    return vecScale(v, 1 / length);
 }
-
-
-
-
-
-
-
-
-
-
 
 function lerpVec(a, b, alpha) {
-
-
-
-
-
-
-
     return [
-
-
-
         a[0] + (b[0] - a[0]) * alpha,
-
-
-
         a[1] + (b[1] - a[1]) * alpha,
-
-
-
         a[2] + (b[2] - a[2]) * alpha
-
-
-
     ];
-
-
-
 }
 
-
-
-
-
-
-
-
-
-
+/* Retire de v sa composante le long de "against", puis normalise.
+   Renvoie null si les deux vecteurs sont presque parallèles. */
+function orthoNormalize(v, against) {
+    const r = vecSub(v, vecScale(against, vecDot(v, against)));
+    const length = vecLength(r);
+    if (!Number.isFinite(length) || length < 0.2) return null;
+    return vecScale(r, 1 / length);
+}
 
 function median(values) {
     if (!values.length) return 0;
@@ -1942,6 +483,7 @@ function median(values) {
     const mid = Math.floor(sorted.length / 2);
     return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
+
 function robustCenter(points) {
     return [
         median(points.map(p => p[0])),
@@ -1951,3341 +493,351 @@ function robustCenter(points) {
 }
 
 function project3D(point) {
-
-
-
-
-
-
-
-    if (
-
-
-
-        !cameraModel ||
-
-
-
-        !point ||
-
-
-
-        !Number.isFinite(point[2]) ||
-
-
-
-        point[2] <= 0.0001
-
-
-
-    ) {
-
-
-
+    if (!cameraModel || !point || !Number.isFinite(point[2]) || point[2] <= 0.0001) {
         return null;
-
-
-
     }
-
-
-
-
-
-
-
     return {
-
-
-
-        x:
-
-
-
-            cameraModel.fx *
-
-
-
-            point[0] /
-
-
-
-            point[2] +
-
-
-
-            cameraModel.cx,
-
-
-
-
-
-
-
-        y:
-
-
-
-            cameraModel.fy *
-
-
-
-            point[1] /
-
-
-
-            point[2] +
-
-
-
-            cameraModel.cy
-
-
-
+        x: cameraModel.fx * point[0] / point[2] + cameraModel.cx,
+        y: cameraModel.fy * point[1] / point[2] + cameraModel.cy
     };
-
-
-
 }
 
+/* Point exprimé dans un repère (origine + axes) -> repère caméra. */
+function frameDirToCamera(frame, v) {
+    return vecAdd(
+        vecAdd(vecScale(frame.x, v[0]), vecScale(frame.y, v[1])),
+        vecScale(frame.z, v[2])
+    );
+}
 
-
-
-
-
-
-
-
-
+function framePointToCamera(frame, v) {
+    return vecAdd(frame.origin, frameDirToCamera(frame, v));
+}
 
 /*
-
-
-
   Le JSON du moteur WASM indique R en "column major".
-
-
-
-  R[0], R[1], R[2] sont donc traités ici
-
-
-
-  comme les axes locaux X, Y, Z du tag exprimés
-
-
-
-  dans le repère caméra.
-
-
-
+  R[0], R[1], R[2] sont traités comme les axes locaux X, Y, Z
+  du tag exprimés dans le repère caméra.
 */
-
-
-
 function poseAxes(marker) {
-
-
-
-
-
-
-
-    if (
-
-
-
-        !marker ||
-
-
-
-        !marker.pose ||
-
-
-
-        !Array.isArray(marker.pose.R) ||
-
-
-
-        marker.pose.R.length < 3
-
-
-
-    ) {
-
-
-
+    if (!marker || !marker.pose || !Array.isArray(marker.pose.R) || marker.pose.R.length < 3) {
         return null;
-
-
-
     }
-
-
-
-
-
-
-
     return {
-
-
-
         x: vecNormalize(marker.pose.R[0]),
-
-
-
         y: vecNormalize(marker.pose.R[1]),
-
-
-
         z: vecNormalize(marker.pose.R[2])
-
-
-
     };
+}
 
-
-
+function markerPosition(marker) {
+    if (!marker || !marker.pose || !Array.isArray(marker.pose.t) || marker.pose.t.length < 3) {
+        return null;
+    }
+    const t = [Number(marker.pose.t[0]), Number(marker.pose.t[1]), Number(marker.pose.t[2])];
+    return t.every(Number.isFinite) ? t : null;
 }
 
 
-
-
-
-
-
-
-
-
-
 /* ============================================================
-
-
-
    CHARGEMENT APRILTAG WASM
-
-
-
 ============================================================ */
-
-
-
-
-
-
 
 async function loadAprilTag() {
-
-
-
-
-
-
-
-    if (detector) {
-
-
-
-        return detector;
-
-
-
-    }
-
-
-
-
-
-
-
-    setMessage(
-
-
-
-        "Chargement AprilTag…",
-
-
-
-        "Initialisation du moteur tag36h11.",
-
-
-
-        "warning"
-
-
-
-    );
-
-
-
-
-
-
-
-    diagnostic.innerHTML =
-
-
-
-        "Téléchargement du moteur AprilTag…";
-
-
-
-
-
-
-
-    return new Promise(
-
-
-
-        function(resolve, reject) {
-
-
-
-
-
-
-
-            const base =
-
-
-
-                "https://arenaxr.github.io/apriltag-js-standalone/";
-
-
-
-
-
-
-
-            window.AprilTagWasmModule = {
-
-
-
-
-
-
-
-                locateFile:
-
-
-
-                function(path) {
-
-
-
-                    return base + path;
-
-
-
+    if (detector) return detector;
+
+    setMessage("Chargement AprilTag…", "Initialisation du moteur tag36h11.", "warning");
+    diagnostic.innerHTML = "Téléchargement du moteur AprilTag…";
+
+    return new Promise(function(resolve, reject) {
+        const base = "https://arenaxr.github.io/apriltag-js-standalone/";
+
+        window.AprilTagWasmModule = {
+            locateFile: function(path) { return base + path; }
+        };
+
+        const script = document.createElement("script");
+        script.src = base + "apriltag_wasm.js";
+
+        script.onload = function() {
+            try {
+                function getModulePromise() {
+                    const wasm = window.AprilTagWasm;
+                    if (typeof wasm === "function") return wasm(window.AprilTagWasmModule);
+                    if (wasm && typeof wasm.then === "function") return wasm;
+                    return null;
                 }
 
-
-
-            };
-
-
-
-
-
-
-
-            const script =
-
-
-
-                document.createElement(
-
-
-
-                    "script"
-
-
-
-                );
-
-
-
-
-
-
-
-            script.src =
-
-
-
-                base +
-
-
-
-                "apriltag_wasm.js";
-
-
-
-
-
-
-
-            script.onload =
-
-
-
-            function() {
-
-
-
-
-
-
-
-                try {
-
-
-
-
-
-
-
-                    function getModulePromise() {
-
-
-
-
-
-
-
-                        const wasm =
-
-
-
-                            window.AprilTagWasm;
-
-
-
-
-
-
-
-                        if (
-
-
-
-                            typeof wasm ===
-
-
-
-                            "function"
-
-
-
-                        ) {
-
-
-
-                            return wasm(
-
-
-
-                                window.AprilTagWasmModule
-
-
-
-                            );
-
-
-
+                function initialise(Module) {
+                    try {
+                        if (!Module) throw new Error("Module WebAssembly vide.");
+                        if (typeof Module.cwrap !== "function") {
+                            throw new Error("Module.cwrap indisponible.");
                         }
 
-
-
-
-
-
-
-                        if (
-
-
-
-                            wasm &&
-
-
-
-                            typeof wasm.then ===
-
-
-
-                            "function"
-
-
-
-                        ) {
-
-
-
-                            return wasm;
-
-
-
-                        }
-
-
-
-
-
-
-
-                        return null;
-
-
-
-                    }
-
-
-
-
-
-
-
-
-
-
-
-                    function initialise(Module) {
-
-
-
-
-
-
-
-                        try {
-
-
-
-
-
-
-
-                            if (!Module) {
-
-
-
-                                throw new Error(
-
-
-
-                                    "Module WebAssembly vide."
-
-
-
-                                );
-
-
-
-                            }
-
-
-
-
-
-
-
-                            if (
-
-
-
-                                typeof Module.cwrap !==
-
-
-
-                                "function"
-
-
-
-                            ) {
-
-
-
-                                throw new Error(
-
-
-
-                                    "Module.cwrap indisponible."
-
-
-
-                                );
-
-
-
-                            }
-
-
-
-
-
-
-
-                            const init =
-
-
-
-                                Module.cwrap(
-
-
-
-                                    "atagjs_init",
-
-
-
-                                    "number",
-
-
-
-                                    []
-
-
-
-                                );
-
-
-
-
-
-
-
-                            const options =
-
-
-
-                                Module.cwrap(
-
-
-
-                                    "atagjs_set_detector_options",
-
-
-
-                                    "number",
-
-
-
-                                    [
-
-
-
-                                        "number",
-
-
-
-                                        "number",
-
-
-
-                                        "number",
-
-
-
-                                        "number",
-
-
-
-                                        "number",
-
-
-
-                                        "number",
-
-
-
-                                        "number"
-
-
-
-                                    ]
-
-
-
-                                );
-
-
-
-
-
-
-
-                            const setImage =
-
-
-
-                                Module.cwrap(
-
-
-
-                                    "atagjs_set_img_buffer",
-
-
-
-                                    "number",
-
-
-
-                                    [
-
-
-
-                                        "number",
-
-
-
-                                        "number",
-
-
-
-                                        "number"
-
-
-
-                                    ]
-
-
-
-                                );
-
-
-
-
-
-
-
-                            const setPoseInfo =
-
-
-
-                                Module.cwrap(
-
-
-
-                                    "atagjs_set_pose_info",
-
-
-
-                                    "number",
-
-
-
-                                    [
-
-
-
-                                        "number",
-
-
-
-                                        "number",
-
-
-
-                                        "number",
-
-
-
-                                        "number"
-
-
-
-                                    ]
-
-
-
-                                );
-
-
-
-
-
-
-
-                            const setTagSize =
-
-
-
-                                Module.cwrap(
-
-
-
-                                    "atagjs_set_tag_size",
-
-
-
-                                    "number",
-
-
-
-                                    [
-
-
-
-                                        "number",
-
-
-
-                                        "number"
-
-
-
-                                    ]
-
-
-
-                                );
-
-
-
-
-
-
-
-                            const detectWasm =
-
-
-
-                                Module.cwrap(
-
-
-
-                                    "atagjs_detect",
-
-
-
-                                    "number",
-
-
-
-                                    []
-
-
-
-                                );
-
-
-
-
-
-
-
-                            const initResult =
-
-
-
-                                init();
-
-
-
-
-
-
-
-                            if (initResult !== 0) {
-
-
-
-                                throw new Error(
-
-
-
-                                    "Échec initialisation moteur AprilTag."
-
-
-
-                                );
-
-
-
-                            }
-
-
-
-
-
-
-
-                            /*
-
-
-
-                              quad_decimate
-
-
-
-                              quad_sigma
-
-
-
-                              nthreads
-
-
-
-                              refine_edges
-
-
-
-                              max_detections
-
-
-
-                              return_pose = 1
-
-
-
-                              return_solutions = 0
-
-
-
-                            */
-
-
-
-                            options(
-
-
-
-                                1.5,
-
-
-
-                                0,
-
-
-
-                                1,
-
-
-
-                                1,
-
-
-
-                                0,
-
-
-
-                                1,
-
-
-
-                                0
-
-
-
-                            );
-
-
-
-
-
-
-
-                            /*
-
-
-
-                              Tous les IDs du cube sont supposés
-
-
-
-                              avoir le même tag physique de 40 mm.
-
-
-
-                            */
-
-
-
-                            for (
-
-
-
-                                let id = 0;
-
-
-
-                                id <= MAX_TAG_ID_TO_CONFIGURE;
-
-
-
-                                id++
-
-
-
-                            ) {
-
-
-
-                                setTagSize(
-
-
-
-                                    id,
-
-
-
-                                    TAG_SIZE_M
-
-
-
-                                );
-
-
-
-                            }
-
-
-
-
-
-
-
-                            detector = {
-
-
-
-
-
-
-
-                                setCameraInfo(
-
-
-
-                                    fx,
-
-
-
-                                    fy,
-
-
-
-                                    cx,
-
-
-
-                                    cy
-
-
-
-                                ) {
-
-
-
-                                    const result =
-
-
-
-                                        setPoseInfo(
-
-
-
-                                            fx,
-
-
-
-                                            fy,
-
-
-
-                                            cx,
-
-
-
-                                            cy
-
-
-
-                                        );
-
-
-
-
-
-
-
-                                    if (result !== 0) {
-
-
-
-                                        throw new Error(
-
-
-
-                                            "Impossible de configurer les paramètres caméra."
-
-
-
-                                        );
-
-
-
-                                    }
-
-
-
-                                },
-
-
-
-
-
-
-
-                                async detect(
-
-
-
-                                    gray,
-
-
-
-                                    width,
-
-
-
-                                    height
-
-
-
-                                ) {
-
-
-
-
-
-
-
-                                    const buffer =
-
-
-
-                                        setImage(
-
-
-
-                                            width,
-
-
-
-                                            height,
-
-
-
-                                            width
-
-
-
-                                        );
-
-
-
-
-
-
-
-                                    if (
-
-
-
-                                        !Number.isFinite(buffer) ||
-
-
-
-                                        buffer <= 0
-
-
-
-                                    ) {
-
-
-
-                                        throw new Error(
-
-
-
-                                            "Impossible de créer le buffer image WASM."
-
-
-
-                                        );
-
-
-
-                                    }
-
-
-
-
-
-
-
-                                    Module.HEAPU8.set(
-
-
-
-                                        gray,
-
-
-
-                                        buffer
-
-
-
-                                    );
-
-
-
-
-
-
-
-                                    const ptr =
-
-
-
-                                        detectWasm();
-
-
-
-
-
-
-
-                                    if (
-
-
-
-                                        !Number.isFinite(ptr) ||
-
-
-
-                                        ptr <= 0
-
-
-
-                                    ) {
-
-
-
-                                        return [];
-
-
-
-                                    }
-
-
-
-
-
-
-
-                                    const length =
-
-
-
-                                        Module.getValue(
-
-
-
-                                            ptr,
-
-
-
-                                            "i32"
-
-
-
-                                        );
-
-
-
-
-
-
-
-                                    if (
-
-
-
-                                        !Number.isFinite(length)
-
-
-
-                                    ) {
-
-
-
-                                        throw new Error(
-
-
-
-                                            "Longueur de résultat AprilTag invalide."
-
-
-
-                                        );
-
-
-
-                                    }
-
-
-
-
-
-
-
-                                    if (length <= 0) {
-
-
-
-                                        return [];
-
-
-
-                                    }
-
-
-
-
-
-
-
-                                    const stringPtr =
-
-
-
-                                        Module.getValue(
-
-
-
-                                            ptr + 4,
-
-
-
-                                            "i32"
-
-
-
-                                        );
-
-
-
-
-
-
-
-                                    if (
-
-
-
-                                        !Number.isFinite(stringPtr) ||
-
-
-
-                                        stringPtr <= 0
-
-
-
-                                    ) {
-
-
-
-                                        throw new Error(
-
-
-
-                                            "Adresse du résultat AprilTag invalide."
-
-
-
-                                        );
-
-
-
-                                    }
-
-
-
-
-
-
-
-                                    const bytes =
-
-
-
-                                        new Uint8Array(
-
-
-
-                                            Module.HEAPU8.buffer,
-
-
-
-                                            stringPtr,
-
-
-
-                                            length
-
-
-
-                                        );
-
-
-
-
-
-
-
-                                    let json = "";
-
-
-
-
-
-
-
-                                    if (
-
-
-
-                                        typeof TextDecoder !==
-
-
-
-                                        "undefined"
-
-
-
-                                    ) {
-
-
-
-                                        json =
-
-
-
-                                            new TextDecoder(
-
-
-
-                                                "utf-8"
-
-
-
-                                            )
-
-
-
-                                            .decode(
-
-
-
-                                                bytes
-
-
-
-                                            );
-
-
-
-                                    }
-
-
-
-                                    else {
-
-
-
-
-
-
-
-                                        for (
-
-
-
-                                            let i = 0;
-
-
-
-                                            i < length;
-
-
-
-                                            i++
-
-
-
-                                        ) {
-
-
-
-                                            json +=
-
-
-
-                                                String.fromCharCode(
-
-
-
-                                                    bytes[i]
-
-
-
-                                                );
-
-
-
-                                        }
-
-
-
-                                    }
-
-
-
-
-
-
-
-                                    if (!json) {
-
-
-
-                                        return [];
-
-
-
-                                    }
-
-
-
-
-
-
-
-                                    const result =
-
-
-
-                                        JSON.parse(
-
-
-
-                                            json
-
-
-
-                                        );
-
-
-
-
-
-
-
-                                    if (
-
-
-
-                                        !Array.isArray(result)
-
-
-
-                                    ) {
-
-
-
-                                        throw new Error(
-
-
-
-                                            "Le détecteur n'a pas renvoyé un tableau."
-
-
-
-                                        );
-
-
-
-                                    }
-
-
-
-
-
-
-
-                                    return result;
-
-
-
-                                }
-
-
-
-                            };
-
-
-
-
-
-
-
-                            diagnostic.innerHTML =
-
-
-
-                                "<span class='ok'>" +
-
-
-
-                                "MOTEUR APRILTAG : PRÊT" +
-
-
-
-                                "</span>" +
-
-
-
-                                "<br>" +
-
-
-
-                                "Famille : tag36h11" +
-
-
-
-                                "<br>" +
-
-
-
-                                "Pose 3D : activée" +
-
-
-
-                                "<br>" +
-
-
-
-                                "Tag : " +
-
-
-
-                                (TAG_SIZE_M * 1000).toFixed(1) +
-
-
-
-                                " mm";
-
-
-
-
-
-
-
-                            resolve(
-
-
-
-                                detector
-
-
-
-                            );
-
-
-
-                        }
-
-
-
-
-
-
-
-                        catch(error) {
-
-
-
-                            reject(error);
-
-
-
-                        }
-
-
-
-                    }
-
-
-
-
-
-
-
-
-
-
-
-                    const promise =
-
-
-
-                        getModulePromise();
-
-
-
-
-
-
-
-                    if (promise) {
-
-
-
-
-
-
-
-                        Promise.resolve(
-
-
-
-                            promise
-
-
-
-                        )
-
-
-
-                        .then(
-
-
-
-                            initialise
-
-
-
-                        )
-
-
-
-                        .catch(
-
-
-
-                            reject
-
-
-
+                        const init = Module.cwrap("atagjs_init", "number", []);
+                        const options = Module.cwrap(
+                            "atagjs_set_detector_options", "number",
+                            ["number", "number", "number", "number", "number", "number", "number"]
                         );
-
-
-
-                    }
-
-
-
-                    else {
-
-
-
-
-
-
-
-                        setTimeout(
-
-
-
-                            function() {
-
-
-
-
-
-
-
-                                const delayed =
-
-
-
-                                    getModulePromise();
-
-
-
-
-
-
-
-                                if (delayed) {
-
-
-
-
-
-
-
-                                    Promise.resolve(
-
-
-
-                                        delayed
-
-
-
-                                    )
-
-
-
-                                    .then(
-
-
-
-                                        initialise
-
-
-
-                                    )
-
-
-
-                                    .catch(
-
-
-
-                                        reject
-
-
-
-                                    );
-
-
-
+                        const setImage = Module.cwrap(
+                            "atagjs_set_img_buffer", "number", ["number", "number", "number"]
+                        );
+                        const setPoseInfo = Module.cwrap(
+                            "atagjs_set_pose_info", "number", ["number", "number", "number", "number"]
+                        );
+                        const setTagSize = Module.cwrap(
+                            "atagjs_set_tag_size", "number", ["number", "number"]
+                        );
+                        const detectWasm = Module.cwrap("atagjs_detect", "number", []);
+
+                        if (init() !== 0) {
+                            throw new Error("Échec initialisation moteur AprilTag.");
+                        }
+
+                        /* quad_decimate, quad_sigma, nthreads, refine_edges,
+                           max_detections, return_pose = 1, return_solutions = 0 */
+                        options(1.5, 0, 1, 1, 0, 1, 0);
+
+                        for (let id = 0; id <= MAX_TAG_ID_TO_CONFIGURE; id++) {
+                            setTagSize(id, TAG_SIZE_M);
+                        }
+
+                        detector = {
+                            setCameraInfo(fx, fy, cx, cy) {
+                                if (setPoseInfo(fx, fy, cx, cy) !== 0) {
+                                    throw new Error("Impossible de configurer les paramètres caméra.");
                                 }
-
-
-
-                                else {
-
-
-
-
-
-
-
-                                    reject(
-
-
-
-                                        new Error(
-
-
-
-                                            "Module WASM AprilTag introuvable."
-
-
-
-                                        )
-
-
-
-                                    );
-
-
-
-                                }
-
-
-
-
-
-
-
                             },
 
+                            async detect(gray, width, height) {
+                                const buffer = setImage(width, height, width);
+                                if (!Number.isFinite(buffer) || buffer <= 0) {
+                                    throw new Error("Impossible de créer le buffer image WASM.");
+                                }
 
+                                Module.HEAPU8.set(gray, buffer);
 
-                            300
+                                const ptr = detectWasm();
+                                if (!Number.isFinite(ptr) || ptr <= 0) return [];
 
+                                const length = Module.getValue(ptr, "i32");
+                                if (!Number.isFinite(length)) {
+                                    throw new Error("Longueur de résultat AprilTag invalide.");
+                                }
+                                if (length <= 0) return [];
 
+                                const stringPtr = Module.getValue(ptr + 4, "i32");
+                                if (!Number.isFinite(stringPtr) || stringPtr <= 0) {
+                                    throw new Error("Adresse du résultat AprilTag invalide.");
+                                }
 
-                        );
+                                const bytes = new Uint8Array(Module.HEAPU8.buffer, stringPtr, length);
 
+                                let json = "";
+                                if (typeof TextDecoder !== "undefined") {
+                                    json = new TextDecoder("utf-8").decode(bytes);
+                                }
+                                else {
+                                    for (let i = 0; i < length; i++) {
+                                        json += String.fromCharCode(bytes[i]);
+                                    }
+                                }
 
+                                if (!json) return [];
 
+                                const result = JSON.parse(json);
+                                if (!Array.isArray(result)) {
+                                    throw new Error("Le détecteur n'a pas renvoyé un tableau.");
+                                }
+                                return result;
+                            }
+                        };
+
+                        resolve(detector);
                     }
-
-
-
+                    catch (error) {
+                        reject(error);
+                    }
                 }
 
+                const promise = getModulePromise();
 
-
-
-
-
-
-                catch(error) {
-
-
-
-                    reject(error);
-
-
-
+                if (promise) {
+                    Promise.resolve(promise).then(initialise).catch(reject);
                 }
+                else {
+                    setTimeout(function() {
+                        const delayed = getModulePromise();
+                        if (delayed) {
+                            Promise.resolve(delayed).then(initialise).catch(reject);
+                        }
+                        else {
+                            reject(new Error("Module WASM AprilTag introuvable."));
+                        }
+                    }, 300);
+                }
+            }
+            catch (error) {
+                reject(error);
+            }
+        };
 
+        script.onerror = function() {
+            reject(new Error("Impossible de télécharger apriltag_wasm.js"));
+        };
 
-
-            };
-
-
-
-
-
-
-
-            script.onerror =
-
-
-
-            function() {
-
-
-
-
-
-
-
-                reject(
-
-
-
-                    new Error(
-
-
-
-                        "Impossible de télécharger apriltag_wasm.js"
-
-
-
-                    )
-
-
-
-                );
-
-
-
-            };
-
-
-
-
-
-
-
-            document.head.appendChild(
-
-
-
-                script
-
-
-
-            );
-
-
-
-        }
-
-
-
-    );
-
-
-
+        document.head.appendChild(script);
+    });
 }
 
 
-
-
-
-
-
-
-
-
-
 /* ============================================================
-
-
-
    CAMÉRA
-
-
-
 ============================================================ */
 
-
-
-
-
-
-
 async function startCamera() {
-
-
-
-
-
-
-
-    startButton.disabled =
-
-
-
-        true;
-
-
-
-
-
-
+    startButton.disabled = true;
 
     try {
-
-
-
-
-
-
-
-        if (
-
-
-
-            !window.isSecureContext
-
-
-
-        ) {
-
-
-
-            throw new Error(
-
-
-
-                "Cette page doit être ouverte en HTTPS."
-
-
-
-            );
-
-
-
+        if (!window.isSecureContext) {
+            throw new Error("Cette page doit être ouverte en HTTPS.");
         }
-
-
-
-
-
-
-
-        if (
-
-
-
-            !navigator.mediaDevices ||
-
-
-
-            !navigator.mediaDevices.getUserMedia
-
-
-
-        ) {
-
-
-
-            throw new Error(
-
-
-
-                "API caméra non disponible."
-
-
-
-            );
-
-
-
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error("API caméra non disponible.");
         }
-
-
-
-
-
-
 
         await loadAprilTag();
 
-        // Charge le STL en parallèle. La caméra reste indépendante du STL.
-        loadTrackedSTL();
-
-
-
-
-
-
-
-        setMessage(
-
-
-
-            "Ouverture caméra…",
-
-
-
-            "Activation de la caméra arrière.",
-
-
-
-            "warning"
-
-
-
-        );
-
-
-
-
-
-
-
-        stream =
-
-
-
-            await navigator
-
-
-
-            .mediaDevices
-
-
-
-            .getUserMedia({
-
-
-
-
-
-
-
-                audio: false,
-
-
-
-
-
-
-
-                video: {
-
-
-
-
-
-
-
-                    facingMode: {
-
-
-
-                        ideal: "environment"
-
-
-
-                    },
-
-
-
-
-
-
-
-                    width: {
-
-
-
-                        ideal: 1280
-
-
-
-                    },
-
-
-
-
-
-
-
-                    height: {
-
-
-
-                        ideal: 720
-
-
-
-                    }
-
-
-
-                }
-
-
-
-            });
-
-
-
-
-
-
-
-        video.srcObject =
-
-
-
-            stream;
-
-
-
-
-
-
-
+        /* Les STL se chargent en parallèle : la caméra n'en dépend pas. */
+        for (const cube of cubes) loadCubeSTL(cube);
+
+        setMessage("Ouverture caméra…", "Activation de la caméra arrière.", "warning");
+
+        stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        });
+
+        video.srcObject = stream;
         await video.play();
-
-
-
-
-
-
-
         await waitForVideo();
-
-
-
-
-
-
-
         configureCanvas();
 
+        startButton.classList.add("hidden");
+        stopButton.classList.remove("hidden");
 
+        setMessage("Recherche AprilTag…", "Présentez les deux cubes devant la caméra.", "warning");
 
-
-
-
-
-        startButton
-
-
-
-            .classList
-
-
-
-            .add(
-
-
-
-                "hidden"
-
-
-
-            );
-
-
-
-
-
-
-
-        stopButton
-
-
-
-            .classList
-
-
-
-            .remove(
-
-
-
-                "hidden"
-
-
-
-            );
-
-
-
-
-
-
-
-        setMessage(
-
-
-
-            "Recherche AprilTag…",
-
-
-
-            "Présentez le cube devant la caméra.",
-
-
-
-            "warning"
-
-
-
-        );
-
-
-
-
-
-
-
-        animationId =
-
-
-
-            requestAnimationFrame(
-
-
-
-                scanFrame
-
-
-
-            );
-
-
-
+        animationId = requestAnimationFrame(scanFrame);
     }
-
-
-
-
-
-
-
-    catch(error) {
-
-
-
-
-
-
-
-        const message =
-
-
-
-            errorText(error);
-
-
-
-
-
-
-
+    catch (error) {
+        const message = errorText(error);
         console.error(error);
-
-
-
-
-
-
-
-        setMessage(
-
-
-
-            "Erreur",
-
-
-
-            message,
-
-
-
-            "error"
-
-
-
-        );
-
-
-
-
-
-
-
+        setMessage("Erreur", message, "error");
         diagnostic.innerHTML =
-
-
-
-            "<span class='error'>" +
-
-
-
-            "ERREUR : " +
-
-
-
-            escapeHtml(message) +
-
-
-
-            "</span>";
-
-
-
-
-
-
-
-        startButton.disabled =
-
-
-
-            false;
-
-
-
+            "<span class='error'>ERREUR : " + escapeHtml(message) + "</span>";
+        startButton.disabled = false;
     }
-
-
-
 }
-
-
-
-
-
-
-
-
-
-
-
-/* ============================================================
-
-
-
-   ATTENTE VIDÉO
-
-
-
-============================================================ */
-
-
-
-
-
-
 
 function waitForVideo() {
-
-
-
-
-
-
-
-    return new Promise(
-
-
-
-        function(resolve) {
-
-
-
-
-
-
-
-            if (
-
-
-
-                video.videoWidth > 0 &&
-
-
-
-                video.videoHeight > 0
-
-
-
-            ) {
-
-
-
-                resolve();
-
-
-
-                return;
-
-
-
-            }
-
-
-
-
-
-
-
-            video.addEventListener(
-
-
-
-                "loadedmetadata",
-
-
-
-                resolve,
-
-
-
-                {
-
-
-
-                    once: true
-
-
-
-                }
-
-
-
-            );
-
-
-
+    return new Promise(function(resolve) {
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+            resolve();
+            return;
         }
-
-
-
-    );
-
-
-
+        video.addEventListener("loadedmetadata", resolve, { once: true });
+    });
 }
 
 
-
-
-
-
-
-
-
-
-
 /* ============================================================
-
-
-
    CANVAS + MODÈLE CAMÉRA
-
-
-
 ============================================================ */
-
-
-
-
-
-
 
 function configureCanvas() {
+    const width = video.videoWidth;
+    const height = video.videoHeight;
 
+    viewer.style.aspectRatio = width + "/" + height;
 
+    const factor = Math.min(1, ANALYSIS_MAX_SIZE / Math.max(width, height));
 
+    analysis.width = Math.round(width * factor);
+    analysis.height = Math.round(height * factor);
 
-
-
-
-    const width =
-
-
-
-        video.videoWidth;
-
-
-
-
-
-
-
-    const height =
-
-
-
-        video.videoHeight;
-
-
-
-
-
-
-
-    viewer.style.aspectRatio =
-
-
-
-        width + "/" + height;
-
-
-
-
-
-
-
-    /*
-
-
-
-      Résolution d'analyse limitée
-
-
-
-      pour préserver Safari/iPad.
-
-
-
-    */
-
-
-
-    const maximum =
-
-
-
-        800;
-
-
-
-
-
-
-
-    const factor =
-
-
-
-        Math.min(
-
-
-
-            1,
-
-
-
-            maximum /
-
-
-
-            Math.max(
-
-
-
-                width,
-
-
-
-                height
-
-
-
-            )
-
-
-
-        );
-
-
-
-
-
-
-
-    analysis.width =
-
-
-
-        Math.round(
-
-
-
-            width * factor
-
-
-
-        );
-
-
-
-
-
-
-
-    analysis.height =
-
-
-
-        Math.round(
-
-
-
-            height * factor
-
-
-
-        );
-
-
-
-
-
-
-
-    overlay.width =
-
-
-
-        analysis.width;
-
-
-
-
-
-
-
-    overlay.height =
-
-
-
-        analysis.height;
-
-
-
-
-
-
-
-    grayBuffer =
-
-
-
-        new Uint8Array(
-
-
-
-            analysis.width *
-
-
-
-            analysis.height
-
-
-
-        );
-
-
-
-
-
-
-
-    /*
-
-
-
-      Intrinsèques PROVISOIRES :
-
-
-
-      Safari ne nous donne pas ici la calibration native complète.
-
-
-
-      On convertit un HFOV approximatif en focale pixels.
-
-
-
-    */
-
-
-
-    const hfovRad =
-
-
-
-        CAMERA_HFOV_DEG *
-
-
-
-        Math.PI /
-
-
-
-        180;
-
-
-
-
-
-
-
-    const fx =
-
-
-
-        (analysis.width / 2) /
-
-
-
-        Math.tan(
-
-
-
-            hfovRad / 2
-
-
-
-        );
-
-
-
-
-
-
-
-    /*
-
-
-
-      Pixels carrés : fy ≈ fx.
-
-
-
-    */
-
-
-
-    const fy =
-
-
-
-        fx;
-
-
-
-
-
-
-
-    const cx =
-
-
-
-        analysis.width / 2;
-
-
-
-
-
-
-
-    const cy =
-
-
-
-        analysis.height / 2;
-
-
-
-
-
-
-
-    cameraModel = {
-
-
-
-        fx,
-
-
-
-        fy,
-
-
-
-        cx,
-
-
-
-        cy
-
-
-
-    };
-
-
-
-
-
-
-
-    detector.setCameraInfo(
-
-
-
-        fx,
-
-
-
-        fy,
-
-
-
-        cx,
-
-
-
-        cy
-
-
-
+    /* Le dessin est plus fin que l'analyse, pour des traits et textes nets. */
+    const dpr = window.devicePixelRatio || 1;
+    overlayScale = Math.max(
+        1,
+        Math.min(OVERLAY_MAX_SCALE, viewer.clientWidth * dpr / analysis.width)
     );
-
-
-
-
-
-
-
-    diagnostic.innerHTML =
-
-
-
-        "<span class='ok'>" +
-
-
-
-        "CAMÉRA + APRILTAG + POSE : PRÊTS" +
-
-
-
-        "</span>" +
-
-
-
-        "<br>" +
-
-
-
-        "Famille : tag36h11" +
-
-
-
-        "<br>" +
-
-
-
-        "Caméra : " +
-
-
-
-        width +
-
-
-
-        " × " +
-
-
-
-        height +
-
-
-
-        "<br>" +
-
-
-
-        "Analyse : " +
-
-
-
-        analysis.width +
-
-
-
-        " × " +
-
-
-
-        analysis.height +
-
-
-
-        "<br>" +
-
-
-
-        "Tag : " +
-
-
-
-        (TAG_SIZE_M * 1000).toFixed(1) +
-
-
-
-        " mm • Cube : " +
-
-
-
-        (CUBE_EDGE_M * 1000).toFixed(1) +
-
-
-
-        " mm" +
-
-        "<br>" +
-        "STL : " + STL_NAME + " • origine Z : -50.0 mm" +
-
-
-
-        "<br>" +
-
-
-
-        "HFOV provisoire : " +
-
-
-
-        CAMERA_HFOV_DEG +
-
-
-
-        "°";
-
-
-
-
-
-
-
-    smoothedCubeCenter =
-
-
-
-        null;
-
-
-
-
-
-
-
-    previousCubeCenter =
-
-
-
-        null;
-
-
-
-
-
-
-
-    stabilityMm =
-
-
-
-        null;
-
-
-
+    overlay.width = Math.round(analysis.width * overlayScale);
+    overlay.height = Math.round(analysis.height * overlayScale);
+
+    grayBuffer = new Uint8Array(analysis.width * analysis.height);
+
+    /*
+      Intrinsèques PROVISOIRES : Safari ne donne pas la calibration native.
+      On convertit un HFOV approximatif en focale pixels (pixels carrés).
+    */
+    const hfovRad = CAMERA_HFOV_DEG * Math.PI / 180;
+    const fx = (analysis.width / 2) / Math.tan(hfovRad / 2);
+    const fy = fx;
+    const cx = analysis.width / 2;
+    const cy = analysis.height / 2;
+
+    cameraModel = { fx, fy, cx, cy, videoWidth: width, videoHeight: height };
+    detector.setCameraInfo(fx, fy, cx, cy);
+
+    for (const cube of cubes) resetCubeTracking(cube);
 }
 
 
-
-
-
-
-
-
-
-
-
 /* ============================================================
-
-
-
    CONVERSION NIVEAUX DE GRIS
-
-
-
 ============================================================ */
 
-
-
-
-
-
-
-function imageToGray(
-
-
-
-    imageData
-
-
-
-) {
-
-
-
-
-
-
-
-    const data =
-
-
-
-        imageData.data;
-
-
-
-
-
-
-
-    let destinationIndex =
-
-
-
-        0;
-
-
-
-
-
-
-
-    for (
-
-
-
-        let sourceIndex = 0;
-
-
-
-        sourceIndex < data.length;
-
-
-
-        sourceIndex += 4
-
-
-
-    ) {
-
-
-
-
-
-
-
-        const r =
-
-
-
-            data[sourceIndex];
-
-
-
-
-
-
-
-        const g =
-
-
-
-            data[sourceIndex + 1];
-
-
-
-
-
-
-
-        const b =
-
-
-
-            data[sourceIndex + 2];
-
-
-
-
-
-
-
-        grayBuffer[
-
-
-
-            destinationIndex
-
-
-
-        ] =
-
-
-
-            Math.round(
-
-
-
-                0.299 * r +
-
-
-
-                0.587 * g +
-
-
-
-                0.114 * b
-
-
-
-            );
-
-
-
-
-
-
-
-        destinationIndex++;
-
-
-
+function imageToGray(imageData) {
+    const data = imageData.data;
+    let destinationIndex = 0;
+    for (let sourceIndex = 0; sourceIndex < data.length; sourceIndex += 4) {
+        grayBuffer[destinationIndex++] = Math.round(
+            0.299 * data[sourceIndex] +
+            0.587 * data[sourceIndex + 1] +
+            0.114 * data[sourceIndex + 2]
+        );
     }
-
-
-
 }
 
 
-
-
-
-
-
-
-
-
-
 /* ============================================================
-
-
-
-   CALCUL CENTRE CUBE MULTI-TAGS
-
-
-
-
-
-
+   CENTRE D'UN CUBE (MULTI-TAGS)
 
    Pour chaque face détectée :
-
-
-
    centre_cube ≈ centre_tag +/− normale_tag × demi-arête.
-
-
-
-
-
-
-
-   On choisit le signe qui place le centre du cube
-
-
-
-   légèrement PLUS LOIN de la caméra que la face visible.
-
-
-
+   On garde le signe qui place le centre PLUS LOIN de la caméra
+   que la face visible.
 ============================================================ */
 
-
-
-
-
-
-
-function estimateCubeCenter(markers) {
+function estimateCubeCenter(cube, markers) {
     const candidates = [];
+    const half = cube.edgeM / 2;
 
     for (const marker of markers) {
-        if (!TRACKED_CUBE_IDS.has(Number(marker.id))) continue;
-        if (!marker.pose || !Array.isArray(marker.pose.t) || marker.pose.t.length < 3) continue;
+        if (!cube.ids.has(Number(marker.id))) continue;
 
-        const t = [
-            Number(marker.pose.t[0]),
-            Number(marker.pose.t[1]),
-            Number(marker.pose.t[2])
-        ];
-        if (!t.every(Number.isFinite)) continue;
+        const t = markerPosition(marker);
+        if (!t) continue;
 
         const axes = poseAxes(marker);
         if (!axes) continue;
 
-        const half = CUBE_EDGE_M / 2;
         const candidateA = vecAdd(t, vecScale(axes.z, half));
         const candidateB = vecSub(t, vecScale(axes.z, half));
         const cubePoint = candidateA[2] >= candidateB[2] ? candidateA : candidateB;
@@ -5301,3947 +853,1080 @@ function estimateCubeCenter(markers) {
         });
     }
 
-    if (!candidates.length) {
-        fusionStats = { accepted: 0, rejected: 0 };
-        return null;
-    }
+    if (!candidates.length) return null;
 
     const consensus = robustCenter(candidates.map(c => c.point));
-    let accepted = [...candidates];
+    let accepted = candidates;
 
     if (candidates.length >= 3) {
         accepted = candidates.filter(c =>
             vecLength(vecSub(c.point, consensus)) <= CENTER_OUTLIER_THRESHOLD_M
         );
-        if (!accepted.length) accepted = [...candidates];
+        if (!accepted.length) accepted = candidates;
     }
 
     let sum = [0, 0, 0];
     let sumWeight = 0;
-
     for (const c of accepted) {
         sum = vecAdd(sum, vecScale(c.point, c.weight));
         sumWeight += c.weight;
     }
-
     if (!Number.isFinite(sumWeight) || sumWeight <= 0) return null;
-
-    fusionStats = {
-        accepted: accepted.length,
-        rejected: candidates.length - accepted.length
-    };
 
     return {
         center: vecScale(sum, 1 / sumWeight),
         candidates,
-        accepted,
-        consensus
+        accepted
     };
 }
+
 
 /* ============================================================
+   REPÈRE 3D D'UN CUBE
 
-   REPÈRE 3D UNIQUE DU CUBE
+   Le repère est toujours direct (main droite), avec :
+   - X = normale sortante de la face xPlus ;
+   - Z = normale sortante de la face zPlus ;
+   - Y = Z × X.
 
+   La face yPlus pointe vers +Y ou −Y selon la façon dont les tags
+   sont collés. Ce sens (ySign) est appris automatiquement dès que
+   les trois faces sont visibles ensemble, pour que le repère reste
+   le même quelle que soit la paire de faces visible.
 
-
-   Convention V7.0 :
-
-   ID 2 = face +X (droite)
-
-   ID 4 = face +Y (avant)
-
-   ID 7 = face +Z (dessus)
-
-
-
-   Pour chaque face visible, la normale est calculée du centre
-
-   géométrique du cube vers le centre du tag.
-
+   Il faut au moins deux faces visibles pour obtenir le repère.
 ============================================================ */
 
+function estimateCubeFrame(cube, markers, rawCenter) {
+    if (!rawCenter) return null;
 
+    const byId = new Map(markers.map(marker => [Number(marker.id), marker]));
 
-function estimateCubeFrame(markers, cubeCenter) {
-
-
-
-    if (!cubeCenter || !markers || markers.length === 0) {
-
-        return null;
-
+    function outwardNormal(id) {
+        const t = markerPosition(byId.get(Number(id)));
+        if (!t) return null;
+        const v = vecSub(t, rawCenter);
+        const length = vecLength(v);
+        if (length < 1e-6) return null;
+        return vecScale(v, 1 / length);
     }
 
+    const nx = outwardNormal(cube.faces.xPlus);
+    const ny = outwardNormal(cube.faces.yPlus);
+    const nz = outwardNormal(cube.faces.zPlus);
 
-
-    const byId = new Map(
-
-        markers.map(marker => [Number(marker.id), marker])
-
-    );
-
-
-
-    function outwardNormalForTag(id) {
-
-
-
-        const marker = byId.get(Number(id));
-
-
-
-        if (
-
-            !marker ||
-
-            !marker.pose ||
-
-            !Array.isArray(marker.pose.t) ||
-
-            marker.pose.t.length < 3
-
-        ) {
-
-            return null;
-
-        }
-
-
-
-        const faceCenter = [
-
-            Number(marker.pose.t[0]),
-
-            Number(marker.pose.t[1]),
-
-            Number(marker.pose.t[2])
-
-        ];
-
-
-
-        if (!faceCenter.every(Number.isFinite)) {
-
-            return null;
-
-        }
-
-
-
-        const v = vecSub(faceCenter, cubeCenter);
-
-
-
-        if (vecLength(v) < 1e-6) {
-
-            return null;
-
-        }
-
-
-
-        return vecNormalize(v);
-
+    if (nx && ny && nz) {
+        const triple = vecDot(ny, vecCross(nz, nx));
+        if (Math.abs(triple) > 0.5) cube.ySign = triple > 0 ? 1 : -1;
     }
 
+    let x, y, z;
 
-
-    let x = outwardNormalForTag(CUBE_FACE_IDS.xPlus);
-
-    let y = outwardNormalForTag(CUBE_FACE_IDS.yPlus);
-
-    let zMeasured = outwardNormalForTag(CUBE_FACE_IDS.zPlus);
-
-    let z = zMeasured;
-
-
-
-    if (x && y) {
-
-
-
-        x = vecNormalize(x);
-
-
-
-        y = vecSub(
-
-            y,
-
-            vecScale(x, vecDot(y, x))
-
-        );
-
-
-
-        y = vecNormalize(y);
-
-        z = vecNormalize(vecCross(x, y));
-
-
-
-        if (zMeasured && vecDot(z, zMeasured) < 0) {
-
-            z = vecScale(z, -1);
-
-            y = vecScale(y, -1);
-
-        }
-
+    if (nx && nz) {
+        x = nx;
+        z = orthoNormalize(nz, x);
+        if (!z) return null;
+        y = vecCross(z, x);
     }
-
-    else if (x && z) {
-
-
-
-        x = vecNormalize(x);
-
-
-
-        z = vecSub(
-
-            z,
-
-            vecScale(x, vecDot(z, x))
-
-        );
-
-
-
-        z = vecNormalize(z);
-
-        y = vecNormalize(vecCross(z, x));
-
+    else if (nx && ny) {
+        x = nx;
+        y = orthoNormalize(vecScale(ny, cube.ySign), x);
+        if (!y) return null;
+        z = vecCross(x, y);
     }
-
-    else if (y && z) {
-
-
-
-        y = vecNormalize(y);
-
-
-
-        z = vecSub(
-
-            z,
-
-            vecScale(y, vecDot(z, y))
-
-        );
-
-
-
-        z = vecNormalize(z);
-
-        x = vecNormalize(vecCross(y, z));
-
+    else if (ny && nz) {
+        z = nz;
+        y = orthoNormalize(vecScale(ny, cube.ySign), z);
+        if (!y) return null;
+        x = vecCross(y, z);
     }
-
     else {
-
         return null;
-
     }
 
+    return { x, y, z };
+}
+
+function updateSmoothedFrame(cube, raw) {
+    const previous = cube.smoothedFrame;
+
+    /* Premier repère, ou saut important : on repart du repère mesuré. */
+    if (!previous || vecDot(raw.x, previous.x) < 0 || vecDot(raw.z, previous.z) < 0) {
+        cube.smoothedFrame = { x: [...raw.x], y: [...raw.y], z: [...raw.z] };
+        return cube.smoothedFrame;
+    }
+
+    const x = vecNormalize(lerpVec(previous.x, raw.x, FRAME_SMOOTHING_ALPHA));
+    const z = orthoNormalize(lerpVec(previous.z, raw.z, FRAME_SMOOTHING_ALPHA), x);
+
+    if (!z) {
+        cube.smoothedFrame = { x: [...raw.x], y: [...raw.y], z: [...raw.z] };
+        return cube.smoothedFrame;
+    }
+
+    cube.smoothedFrame = { x, y: vecCross(z, x), z };
+    return cube.smoothedFrame;
+}
+
+function updateSmoothedCenter(cube, rawCenter) {
+    if (!cube.smoothedCenter) {
+        cube.smoothedCenter = [...rawCenter];
+        cube.lastRawCenter = [...rawCenter];
+        cube.stabilityMm = 0;
+        return cube.smoothedCenter;
+    }
+
+    const rawJumpMm = vecLength(vecSub(rawCenter, cube.lastRawCenter)) * 1000;
+    cube.stabilityMm = cube.stabilityMm === null
+        ? rawJumpMm
+        : cube.stabilityMm * 0.70 + rawJumpMm * 0.30;
+
+    cube.smoothedCenter = lerpVec(cube.smoothedCenter, rawCenter, CENTER_SMOOTHING_ALPHA);
+    cube.lastRawCenter = [...rawCenter];
+    return cube.smoothedCenter;
+}
+
+function stabilityLabel(stabilityMm) {
+    if (stabilityMm === null || !Number.isFinite(stabilityMm)) return "—";
+    if (stabilityMm < 1.5) return "très stable";
+    if (stabilityMm < 4) return "stable";
+    if (stabilityMm < 8) return "moyen";
+    return "instable";
+}
+
+/* Met à jour un cube pour l'image courante : centre, repère, maintien. */
+function updateCube(cube, markers, now) {
+    cube.visibleIds = markers
+        .map(marker => Number(marker.id))
+        .filter(id => cube.ids.has(id));
+
+    cube.center = null;
+    cube.frame = null;
+    cube.held = false;
+
+    const estimate = estimateCubeCenter(cube, markers);
+    cube.estimate = estimate;
+
+    if (estimate) {
+        cube.center = [...updateSmoothedCenter(cube, estimate.center)];
+
+        const rawFrame = estimateCubeFrame(cube, markers, estimate.center);
+
+        if (rawFrame) {
+            const smooth = updateSmoothedFrame(cube, rawFrame);
+            cube.frame = {
+                origin: [...cube.center],
+                x: [...smooth.x],
+                y: [...smooth.y],
+                z: [...smooth.z]
+            };
+            cube.lastGood = { frame: cube.frame, time: now };
+            return;
+        }
+    }
+
+    if (cube.lastGood && now - cube.lastGood.time <= POSE_HOLD_MS) {
+        cube.frame = cube.lastGood.frame;
+        cube.center = [...cube.frame.origin];
+        cube.held = true;
+        return;
+    }
+
+    cube.smoothedFrame = null;
+    if (!estimate) {
+        cube.smoothedCenter = null;
+        cube.lastRawCenter = null;
+        cube.stabilityMm = null;
+    }
+}
 
 
+/* ============================================================
+   POSITION RELATIVE DE B PAR RAPPORT À A
+
+   rel.x, rel.y, rel.z : axes du cube B exprimés dans le repère du cube A
+   rel.t               : centre du cube B dans le repère du cube A (mètres)
+============================================================ */
+
+function relativePose(frameA, frameB) {
+    const inA = v => [vecDot(v, frameA.x), vecDot(v, frameA.y), vecDot(v, frameA.z)];
     return {
-
-        origin: cubeCenter,
-
-        x,
-
-        y,
-
-        z
-
+        x: inA(frameB.x),
+        y: inA(frameB.y),
+        z: inA(frameB.z),
+        t: inA(vecSub(frameB.origin, frameA.origin))
     };
-
 }
 
-
-
-
-
-function updateSmoothedFrame(rawFrame) {
-    if (!rawFrame) return smoothedCubeFrame;
-
-    if (!smoothedCubeFrame) {
-        smoothedCubeFrame = {
-            origin: [...rawFrame.origin],
-            x: [...rawFrame.x],
-            y: [...rawFrame.y],
-            z: [...rawFrame.z]
-        };
-        return smoothedCubeFrame;
-    }
-
-    let x = [...rawFrame.x];
-    let y = [...rawFrame.y];
-    let z = [...rawFrame.z];
-
-    if (vecDot(x, smoothedCubeFrame.x) < 0) x = vecScale(x, -1);
-    if (vecDot(y, smoothedCubeFrame.y) < 0) y = vecScale(y, -1);
-    if (vecDot(z, smoothedCubeFrame.z) < 0) z = vecScale(z, -1);
-
-    x = vecNormalize(lerpVec(smoothedCubeFrame.x, x, FRAME_SMOOTHING_ALPHA));
-    y = lerpVec(smoothedCubeFrame.y, y, FRAME_SMOOTHING_ALPHA);
-    y = vecNormalize(vecSub(y, vecScale(x, vecDot(y, x))));
-    z = vecNormalize(vecCross(x, y));
-
-    if (vecDot(z, smoothedCubeFrame.z) < 0) {
-        z = vecScale(z, -1);
-        y = vecScale(y, -1);
-    }
-
-    smoothedCubeFrame = { origin: [...rawFrame.origin], x, y, z };
-    return smoothedCubeFrame;
+/* Repère caméra du cube B reconstruit depuis le cube A et la relation figée. */
+function frameFromRelative(frameA, rel) {
+    return {
+        origin: framePointToCamera(frameA, rel.t),
+        x: frameDirToCamera(frameA, rel.x),
+        y: frameDirToCamera(frameA, rel.y),
+        z: frameDirToCamera(frameA, rel.z)
+    };
 }
 
-function cubeEulerDegrees(frame) {
+function eulerDegrees(axes) {
+    if (!axes) return null;
 
+    const r00 = axes.x[0];
+    const r10 = axes.x[1];
+    const r20 = axes.x[2];
+    const r21 = axes.y[2];
+    const r22 = axes.z[2];
+    const r01 = axes.y[0];
+    const r11 = axes.y[1];
 
-
-    if (!frame) {
-
-        return null;
-
-    }
-
-
-
-    const r00 = frame.x[0];
-
-    const r10 = frame.x[1];
-
-    const r20 = frame.x[2];
-
-
-
-    const r21 = frame.y[2];
-
-    const r22 = frame.z[2];
-
-
-
-    const r01 = frame.y[0];
-
-    const r11 = frame.y[1];
-
-
-
-    const pitch = Math.atan2(
-
-        -r20,
-
-        Math.hypot(r00, r10)
-
-    );
-
-
-
+    const pitch = Math.atan2(-r20, Math.hypot(r00, r10));
     let roll;
-
     let yaw;
 
-
-
     if (Math.abs(Math.cos(pitch)) > 1e-6) {
-
         roll = Math.atan2(r21, r22);
-
         yaw = Math.atan2(r10, r00);
-
     }
-
     else {
-
         roll = 0;
-
         yaw = Math.atan2(-r01, r11);
-
     }
-
-
 
     const toDeg = 180 / Math.PI;
-
-
-
-    return {
-
-        roll: roll * toDeg,
-
-        pitch: pitch * toDeg,
-
-        yaw: yaw * toDeg
-
-    };
-
+    return { roll: roll * toDeg, pitch: pitch * toDeg, yaw: yaw * toDeg };
 }
 
-
-
-
-
-function drawCubeAxes(frame) {
-
-
-
-    if (!frame) {
-
-        return;
-
-    }
-
-
-
-    const origin2D = project3D(frame.origin);
-
-
-
-    if (!origin2D) {
-
-        return;
-
-    }
-
-
-
-    const axisLength = 0.040;
-
-
-
-    const axes = [
-
-        { name: "X", vector: frame.x, color: "#ff453a" },
-
-        { name: "Y", vector: frame.y, color: "#32d74b" },
-
-        { name: "Z", vector: frame.z, color: "#0a84ff" }
-
-    ];
-
-
-
-    for (const axis of axes) {
-
-
-
-        const p3 = vecAdd(
-
-            frame.origin,
-
-            vecScale(axis.vector, axisLength)
-
-        );
-
-
-
-        const p2 = project3D(p3);
-
-
-
-        if (!p2) {
-
-            continue;
-
-        }
-
-
-
-        overlayCtx.beginPath();
-
-        overlayCtx.moveTo(origin2D.x, origin2D.y);
-
-        overlayCtx.lineTo(p2.x, p2.y);
-
-        overlayCtx.lineWidth = 6;
-
-        overlayCtx.strokeStyle = axis.color;
-
-        overlayCtx.stroke();
-
-
-
-        overlayCtx.font = "bold 20px -apple-system";
-
-        overlayCtx.fillStyle = axis.color;
-
-        overlayCtx.textAlign = "center";
-
-        overlayCtx.fillText(
-
-            axis.name,
-
-            p2.x,
-
-            p2.y - 6
-
-        );
-
-    }
-
-
-
-    overlayCtx.beginPath();
-
-    overlayCtx.arc(
-
-        origin2D.x,
-
-        origin2D.y,
-
-        8,
-
-        0,
-
-        Math.PI * 2
-
-    );
-
-    overlayCtx.fillStyle = "#ffffff";
-
-    overlayCtx.fill();
-
+/* Angle (en degrés) entre deux orientations données par leurs axes. */
+function rotationAngleDeg(a, b) {
+    const trace = vecDot(a.x, b.x) + vecDot(a.y, b.y) + vecDot(a.z, b.z);
+    const cos = Math.max(-1, Math.min(1, (trace - 1) / 2));
+    return Math.acos(cos) * 180 / Math.PI;
 }
-
-
-
 
 
 /* ============================================================
-
-
-
-   LISSAGE + STABILITÉ
-
-
-
-============================================================ */
-
-
-
-
-
-
-
-function updateSmoothedCenter(rawCenter) {
-    if (!rawCenter) return smoothedCubeCenter;
-
-    if (!smoothedCubeCenter) {
-        smoothedCubeCenter = [...rawCenter];
-        previousCubeCenter = [...rawCenter];
-        lastRawCubeCenter = [...rawCenter];
-        stabilityMm = 0;
-        return smoothedCubeCenter;
-    }
-
-    if (lastRawCubeCenter) {
-        const rawJumpMm = vecLength(vecSub(rawCenter, lastRawCubeCenter)) * 1000;
-        stabilityMm = stabilityMm === null
-            ? rawJumpMm
-            : stabilityMm * 0.70 + rawJumpMm * 0.30;
-    }
-
-    const before = [...smoothedCubeCenter];
-    smoothedCubeCenter = lerpVec(
-        smoothedCubeCenter,
-        rawCenter,
-        CENTER_SMOOTHING_ALPHA
-    );
-    previousCubeCenter = before;
-    lastRawCubeCenter = [...rawCenter];
-    return smoothedCubeCenter;
-}
-
-function stabilityLabel() {
-
-
-
-
-
-
-
-    if (
-
-
-
-        stabilityMm === null ||
-
-
-
-        !Number.isFinite(stabilityMm)
-
-
-
-    ) {
-
-
-
-        return "—";
-
-
-
-    }
-
-
-
-
-
-
-
-    if (stabilityMm < 1.5) {
-
-
-
-        return "très stable";
-
-
-
-    }
-
-
-
-
-
-
-
-    if (stabilityMm < 4) {
-
-
-
-        return "stable";
-
-
-
-    }
-
-
-
-
-
-
-
-    if (stabilityMm < 8) {
-
-
-
-        return "moyen";
-
-
-
-    }
-
-
-
-
-
-
-
-    return "instable";
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-/* ============================================================
-   STL INTÉGRÉ + PROJECTION 3D
+   STL : CHARGEMENT
 ============================================================ */
 
 function parseBinarySTL(arrayBuffer) {
     const view = new DataView(arrayBuffer);
-    if (view.byteLength < 84) {
-        throw new Error("STL trop court ou invalide.");
-    }
+    if (view.byteLength < 84) throw new Error("fichier trop court ou invalide");
 
-    const triangleCount = view.getUint32(80, true);
-    const expected = 84 + triangleCount * 50;
+    const count = view.getUint32(80, true);
+    const expected = 84 + count * 50;
+
     if (view.byteLength < expected) {
-        throw new Error("STL tronqué.");
+        const head = new TextDecoder("utf-8").decode(new Uint8Array(arrayBuffer, 0, 5));
+        if (head.toLowerCase() === "solid") {
+            throw new Error("STL ASCII non pris en charge (enregistrez-le en binaire)");
+        }
+        throw new Error("fichier tronqué");
     }
 
-    const triangles = [];
+    /* Sommets en mm, 9 valeurs par triangle. */
+    const vertsMm = new Float32Array(count * 9);
     let offset = 84;
-    for (let i = 0; i < triangleCount; i++) {
-        offset += 12;
-        const tri = [];
-        for (let v = 0; v < 3; v++) {
-            tri.push([
-                view.getFloat32(offset, true) * STL_SCALE_TO_M,
-                view.getFloat32(offset + 4, true) * STL_SCALE_TO_M,
-                view.getFloat32(offset + 8, true) * STL_SCALE_TO_M
-            ]);
-            offset += 12;
+    let k = 0;
+
+    for (let i = 0; i < count; i++) {
+        offset += 12;                          // normale ignorée
+        for (let j = 0; j < 9; j++) {
+            vertsMm[k++] = view.getFloat32(offset, true);
+            offset += 4;
         }
-        offset += 2;
-        triangles.push(tri);
+        offset += 2;                           // attribut ignoré
     }
-    return triangles;
+
+    /* Normale de chaque triangle, pour l'éclairage. */
+    const normals = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+        const p = i * 9;
+        const e1 = [vertsMm[p + 3] - vertsMm[p], vertsMm[p + 4] - vertsMm[p + 1], vertsMm[p + 5] - vertsMm[p + 2]];
+        const e2 = [vertsMm[p + 6] - vertsMm[p], vertsMm[p + 7] - vertsMm[p + 1], vertsMm[p + 8] - vertsMm[p + 2]];
+        const c = vecCross(e1, e2);
+        const length = vecLength(c);
+        if (length > 1e-12) {
+            normals[i * 3] = c[0] / length;
+            normals[i * 3 + 1] = c[1] / length;
+            normals[i * 3 + 2] = c[2] / length;
+        }
+    }
+
+    return {
+        count,
+        vertsMm,
+        normals,
+        proj: new Float32Array(count * 6),
+        depth: new Float32Array(count),
+        order: new Uint32Array(count),
+        shade: new Uint8Array(count)
+    };
 }
 
-async function loadTrackedSTL() {
-    if (stlTriangles) return stlTriangles;
-    if (stlLoadPromise) return stlLoadPromise;
+const meshCache = new Map();    // nom de fichier -> Promise<mesh>
 
-    stlLoadPromise = fetch(STL_NAME, { cache: "no-store" })
+function loadMesh(name) {
+    if (meshCache.has(name)) return meshCache.get(name);
+
+    const promise = fetch(name, { cache: "no-store" })
         .then(response => {
-            if (!response.ok) {
-                throw new Error("STL introuvable : " + STL_NAME);
-            }
+            if (!response.ok) throw new Error("fichier introuvable");
             return response.arrayBuffer();
         })
-        .then(buffer => {
-            stlTriangles = parseBinarySTL(buffer);
-            return stlTriangles;
-        })
-        .catch(error => {
-            console.error("Chargement STL :", error);
-            stlLoadPromise = null;
-            return null;
-        });
+        .then(parseBinarySTL);
 
-    return stlLoadPromise;
+    promise.catch(() => meshCache.delete(name));   // permet un nouvel essai
+    meshCache.set(name, promise);
+    return promise;
 }
 
-function cubeLocalToCamera(localPoint, frame) {
-    let p = [...frame.origin];
-    p = vecAdd(p, vecScale(frame.x, STL_OFFSET_M[0] + localPoint[0]));
-    p = vecAdd(p, vecScale(frame.y, STL_OFFSET_M[1] + localPoint[1]));
-    p = vecAdd(p, vecScale(frame.z, STL_OFFSET_M[2] + localPoint[2]));
-    return p;
+async function loadCubeSTL(cube) {
+    if (cube.mesh) return;
+    cube.stlState = "chargement…";
+    try {
+        cube.mesh = await loadMesh(cube.stlName);
+        cube.stlState = cube.mesh.count + " triangles";
+    }
+    catch (error) {
+        console.error("Chargement STL " + cube.key + " :", error);
+        cube.mesh = null;
+        cube.stlState = "ERREUR — " + errorText(error);
+    }
+    updateButtonsAndGrid();
 }
 
-function stlOriginCamera(frame) {
-    let p = [...frame.origin];
-    p = vecAdd(p, vecScale(frame.x, STL_OFFSET_M[0]));
-    p = vecAdd(p, vecScale(frame.y, STL_OFFSET_M[1]));
-    p = vecAdd(p, vecScale(frame.z, STL_OFFSET_M[2]));
-    return p;
+
+/* ============================================================
+   STL : DESSIN
+
+   Rendu en volume ombré : chaque triangle est éclairé selon son
+   orientation, les faces arrière sont ignorées. Le modèle est
+   dessiné sur un calque séparé puis posé sur la vidéo avec une
+   légère transparence, pour garder l'objet réel visible dessous.
+============================================================ */
+
+let stlLayer = null;
+let stlLayerCtx = null;
+
+function stlPalette(cube) {
+    if (cube.palette) return cube.palette;
+
+    const base = cube.color.map(c => c * STL_TINT + 244 * (1 - STL_TINT));
+    cube.palette = [];
+
+    for (let i = 0; i < STL_SHADE_LEVELS; i++) {
+        const k = 0.28 + 0.72 * i / (STL_SHADE_LEVELS - 1);
+        cube.palette.push("rgb(" + base.map(c => Math.round(c * k)).join(",") + ")");
+    }
+    return cube.palette;
 }
 
-function drawTrackedSTL(frame) {
-    if (!frame) return;
+function drawSTL(cube, frame) {
+    const mesh = cube.mesh;
+    if (!mesh || !frame || !cameraModel || !overlay.width) return;
 
-    const triangles = stlTriangles;
-    if (!triangles || triangles.length === 0) {
-        return;
+    if (!stlLayer) {
+        stlLayer = document.createElement("canvas");
+        stlLayerCtx = stlLayer.getContext("2d");
+    }
+    if (stlLayer.width !== overlay.width || stlLayer.height !== overlay.height) {
+        stlLayer.width = overlay.width;
+        stlLayer.height = overlay.height;
     }
 
-    const drawList = [];
+    const ctx = stlLayerCtx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, stlLayer.width, stlLayer.height);
+    ctx.setTransform(overlayScale, 0, 0, overlayScale, 0, 0);
 
-    for (const tri of triangles) {
-        const c0 = cubeLocalToCamera(tri[0], frame);
-        const c1 = cubeLocalToCamera(tri[1], frame);
-        const c2 = cubeLocalToCamera(tri[2], frame);
+    const s = STL_SCALE_TO_M;
+    const o = framePointToCamera(frame, cube.stlOffsetM);
 
-        if (c0[2] <= 0.001 || c1[2] <= 0.001 || c2[2] <= 0.001) continue;
+    const ax = frame.x, ay = frame.y, az = frame.z;
+    const fx = cameraModel.fx, fy = cameraModel.fy;
+    const cx = cameraModel.cx, cy = cameraModel.cy;
+    const L = STL_LIGHT_DIR;
 
-        const p0 = project3D(c0);
-        const p1 = project3D(c1);
-        const p2 = project3D(c2);
-        if (!p0 || !p1 || !p2) continue;
+    const v = mesh.vertsMm;
+    const nrm = mesh.normals;
+    const proj = mesh.proj;
+    const depth = mesh.depth;
+    const order = mesh.order;
+    const shade = mesh.shade;
+    const maxLevel = STL_SHADE_LEVELS - 1;
+    let visible = 0;
 
-        const depth = (c0[2] + c1[2] + c2[2]) / 3;
-        drawList.push({ p0, p1, p2, depth });
+    for (let i = 0; i < mesh.count; i++) {
+        /* Normale du triangle dans le repère caméra. */
+        const n = i * 3;
+        const nX = ax[0] * nrm[n] + ay[0] * nrm[n + 1] + az[0] * nrm[n + 2];
+        const nY = ax[1] * nrm[n] + ay[1] * nrm[n + 1] + az[1] * nrm[n + 2];
+        const nZ = ax[2] * nrm[n] + ay[2] * nrm[n + 1] + az[2] * nrm[n + 2];
+
+        let k = i * 9;
+        let p = i * 6;
+        let depthSum = 0;
+        let ok = true;
+
+        for (let j = 0; j < 3; j++) {
+            const vx = v[k] * s, vy = v[k + 1] * s, vz = v[k + 2] * s;
+            const X = o[0] + ax[0] * vx + ay[0] * vy + az[0] * vz;
+            const Y = o[1] + ax[1] * vx + ay[1] * vy + az[1] * vz;
+            const Z = o[2] + ax[2] * vx + ay[2] * vy + az[2] * vz;
+
+            if (Z <= 0.001) { ok = false; break; }
+
+            /* Face arrière : la normale ne regarde pas la caméra. */
+            if (j === 0 && nX * X + nY * Y + nZ * Z >= 0) { ok = false; break; }
+
+            proj[p] = fx * X / Z + cx;
+            proj[p + 1] = fy * Y / Z + cy;
+            depthSum += Z;
+            k += 3;
+            p += 2;
+        }
+
+        if (!ok) continue;
+
+        const diffuse = Math.max(0, nX * L[0] + nY * L[1] + nZ * L[2]);
+        shade[i] = Math.round(diffuse * maxLevel);
+        depth[i] = depthSum;
+        order[visible++] = i;
     }
 
-    // peintre : faces lointaines d'abord
-    drawList.sort((a, b) => b.depth - a.depth);
+    /* Algorithme du peintre : faces lointaines d'abord. */
+    const sorted = order.subarray(0, visible);
+    sorted.sort((a, b) => depth[b] - depth[a]);
+
+    const palette = stlPalette(cube);
+    let current = -1;
+
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 0.6;          // comble les jours entre triangles voisins
+
+    for (let m = 0; m < visible; m++) {
+        const i = sorted[m];
+        const p = i * 6;
+
+        if (shade[i] !== current) {
+            current = shade[i];
+            ctx.fillStyle = palette[current];
+            ctx.strokeStyle = palette[current];
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(proj[p], proj[p + 1]);
+        ctx.lineTo(proj[p + 2], proj[p + 3]);
+        ctx.lineTo(proj[p + 4], proj[p + 5]);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    }
 
     overlayCtx.save();
-    overlayCtx.lineJoin = "round";
-    overlayCtx.lineCap = "round";
-
-    for (const item of drawList) {
-        overlayCtx.beginPath();
-        overlayCtx.moveTo(item.p0.x, item.p0.y);
-        overlayCtx.lineTo(item.p1.x, item.p1.y);
-        overlayCtx.lineTo(item.p2.x, item.p2.y);
-        overlayCtx.closePath();
-        overlayCtx.fillStyle = `rgba(88, 215, 255, ${STL_FILL_ALPHA})`;
-        overlayCtx.strokeStyle = `rgba(88, 215, 255, ${STL_STROKE_ALPHA})`;
-        overlayCtx.lineWidth = 0.8;
-        overlayCtx.fill();
-        overlayCtx.stroke();
-    }
-
-    const origin3D = stlOriginCamera(frame);
-    const origin2D = project3D(origin3D);
-    const cube2D = project3D(frame.origin);
-
-    if (origin2D && cube2D) {
-        overlayCtx.beginPath();
-        overlayCtx.moveTo(cube2D.x, cube2D.y);
-        overlayCtx.lineTo(origin2D.x, origin2D.y);
-        overlayCtx.strokeStyle = "rgba(255, 214, 10, .9)";
-        overlayCtx.lineWidth = 3;
-        overlayCtx.setLineDash([8, 6]);
-        overlayCtx.stroke();
-        overlayCtx.setLineDash([]);
-
-        drawCross(origin2D.x, origin2D.y, 11, "#58d7ff", 4);
-        overlayCtx.font = "bold 15px -apple-system";
-        overlayCtx.textAlign = "center";
-        overlayCtx.fillStyle = "rgba(0,0,0,.82)";
-        overlayCtx.fillRect(origin2D.x - 72, origin2D.y + 15, 144, 24);
-        overlayCtx.fillStyle = "#58d7ff";
-        overlayCtx.fillText("ORIGINE STL -50 mm", origin2D.x, origin2D.y + 33);
-    }
-
+    overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
+    overlayCtx.globalAlpha = STL_ALPHA;
+    overlayCtx.drawImage(stlLayer, 0, 0);
     overlayCtx.restore();
+
+    /* Origine du STL : simple pastille. */
+    const origin2D = project3D(o);
+    if (origin2D) {
+        overlayCtx.beginPath();
+        overlayCtx.arc(origin2D.x, origin2D.y, 3.5, 0, Math.PI * 2);
+        overlayCtx.fillStyle = cubeColor(cube);
+        overlayCtx.fill();
+        overlayCtx.lineWidth = 1.5;
+        overlayCtx.strokeStyle = "rgba(255,255,255,.95)";
+        overlayCtx.stroke();
+    }
 }
 
+
 /* ============================================================
+   STL : EXPORT
 
-
-
-   DÉTECTION
-
-
-
+   Les deux fichiers exportés partagent le système de coordonnées
+   du STL A :
+   - STL A : inchangé ;
+   - STL B : sommets déplacés selon la position relative enregistrée.
 ============================================================ */
 
+function buildBinarySTL(mesh, transform, headerText) {
+    const buffer = new ArrayBuffer(84 + mesh.count * 50);
+    const view = new DataView(buffer);
 
+    for (let i = 0; i < Math.min(80, headerText.length); i++) {
+        view.setUint8(i, headerText.charCodeAt(i) & 0x7f);
+    }
+    view.setUint32(80, mesh.count, true);
 
+    const v = mesh.vertsMm;
+    let offset = 84;
 
+    for (let i = 0; i < mesh.count; i++) {
+        const k = i * 9;
+        let a = [v[k], v[k + 1], v[k + 2]];
+        let b = [v[k + 3], v[k + 4], v[k + 5]];
+        let c = [v[k + 6], v[k + 7], v[k + 8]];
 
+        if (transform) {
+            a = transform(a);
+            b = transform(b);
+            c = transform(c);
+        }
 
+        const cross = vecCross(vecSub(b, a), vecSub(c, a));
+        const length = vecLength(cross);
+        const normal = length > 1e-12 ? vecScale(cross, 1 / length) : [0, 0, 0];
 
-async function scanFrame(
+        for (const vec of [normal, a, b, c]) {
+            view.setFloat32(offset, vec[0], true);
+            view.setFloat32(offset + 4, vec[1], true);
+            view.setFloat32(offset + 8, vec[2], true);
+            offset += 12;
+        }
+        view.setUint16(offset, 0, true);
+        offset += 2;
+    }
 
+    return buffer;
+}
 
+/* Sommet du STL B (mm) -> coordonnées du STL A (mm). */
+function makeBToATransform(rel) {
+    const tMm = vecScale(rel.t, 1000);
+    const offsetA = vecScale(cubeA.stlOffsetM, 1000);
+    const offsetB = vecScale(cubeB.stlOffsetM, 1000);
 
-    timestamp
-
-
-
-) {
-
-
-
-
-
-
-
-    animationId =
-
-
-
-        requestAnimationFrame(
-
-
-
-            scanFrame
-
-
-
+    return function(vertex) {
+        const q = vecAdd(offsetB, vertex);                 // repère du cube B
+        const inCubeA = vecAdd(
+            tMm,
+            vecAdd(
+                vecAdd(vecScale(rel.x, q[0]), vecScale(rel.y, q[1])),
+                vecScale(rel.z, q[2])
+            )
         );
+        return vecSub(inCubeA, offsetA);                   // repère du STL A
+    };
+}
 
+function downloadBuffer(buffer, fileName) {
+    const blob = new Blob([buffer], { type: "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
 
-
-
-
-
-
-    if (
-
-
-
-        !stream ||
-
-
-
-        !detector ||
-
-
-
-        video.readyState < 2
-
-
-
-    ) {
-
-
-
+function exportCube(cube) {
+    if (!recorded) {
+        setMessage("Export impossible", "Enregistrez d'abord la position.", "warning");
         return;
-
-
-
+    }
+    if (!cube.mesh) {
+        setMessage("Export impossible", "Le STL " + cube.key + " n'est pas chargé.", "error");
+        return;
     }
 
+    const base = cube.stlName.replace(/\.stl$/i, "");
+    let buffer;
+    let fileName;
 
-
-
-
-
-
-    if (detectionRunning) {
-
-
-
-        return;
-
-
-
+    if (cube === cubeA) {
+        buffer = buildBinarySTL(cube.mesh, null, "AprilTag " + VERSION + " STL A reference");
+        fileName = base + "_A_reference.stl";
+    }
+    else {
+        buffer = buildBinarySTL(
+            cube.mesh,
+            makeBToATransform(recorded.rel),
+            "AprilTag " + VERSION + " STL B positionne par rapport a A"
+        );
+        fileName = base + "_B_positionne.stl";
     }
 
+    downloadBuffer(buffer, fileName);
+    setMessage("Export STL " + cube.key + " ✓", fileName, "ok");
+}
 
 
+/* ============================================================
+   ENREGISTREMENT DE LA POSITION
+============================================================ */
 
+function toggleRecord() {
+    if (recorded) {
+        recorded = null;
+        if (!stream) setMessage("Position libérée", "Démarrez la caméra pour un nouvel enregistrement.");
+    }
+    else if (cubeA.frame && cubeB.frame) {
+        recorded = { rel: relativePose(cubeA.frame, cubeB.frame) };
+    }
+    updateButtonsAndGrid();
+}
 
+function updateButtonsAndGrid() {
+    const shown = recorded ? recorded.rel : lastLiveRel;
 
-
-    /*
-
-
-
-      Environ 8 analyses / seconde.
-
-
-
-    */
-
-
-
-    if (
-
-
-
-        timestamp -
-
-
-
-        lastDetectionTime <
-
-
-
-        125
-
-
-
-    ) {
-
-
-
-        return;
-
-
-
+    if (shown) {
+        const euler = eulerDegrees(shown);
+        relEls.x.textContent = (shown.t[0] * 1000).toFixed(1) + " mm";
+        relEls.y.textContent = (shown.t[1] * 1000).toFixed(1) + " mm";
+        relEls.z.textContent = (shown.t[2] * 1000).toFixed(1) + " mm";
+        relEls.roll.textContent = euler.roll.toFixed(1) + "°";
+        relEls.pitch.textContent = euler.pitch.toFixed(1) + "°";
+        relEls.yaw.textContent = euler.yaw.toFixed(1) + "°";
+    }
+    else {
+        for (const key in relEls) relEls[key].textContent = "—";
     }
 
+    recordButton.textContent = recorded ? "Libérer la position" : "Enregistrer la position";
+    recordButton.className = recorded ? "record locked" : "record";
+    recordButton.disabled = !recorded && !lastLiveRel;
+
+    exportAButton.disabled = !recorded || !cubeA.mesh;
+    exportBButton.disabled = !recorded || !cubeB.mesh;
+}
 
 
+/* ============================================================
+   DÉTECTION
+============================================================ */
 
+async function scanFrame(timestamp) {
+    animationId = requestAnimationFrame(scanFrame);
 
+    if (!stream || !detector || video.readyState < 2) return;
+    if (detectionRunning) return;
+    if (timestamp - lastDetectionTime < DETECTION_INTERVAL_MS) return;
 
-
-    lastDetectionTime =
-
-
-
-        timestamp;
-
-
-
-
-
-
-
-    detectionRunning =
-
-
-
-        true;
-
-
-
-
-
-
+    lastDetectionTime = timestamp;
+    detectionRunning = true;
 
     try {
+        analysisCtx.drawImage(video, 0, 0, analysis.width, analysis.height);
+        const imageData = analysisCtx.getImageData(0, 0, analysis.width, analysis.height);
+        imageToGray(imageData);
 
+        const markers = (await detector.detect(grayBuffer, analysis.width, analysis.height)) || [];
+        const now = performance.now();
 
+        for (const cube of cubes) updateCube(cube, markers, now);
 
+        lastLiveRel = (cubeA.frame && cubeB.frame)
+            ? relativePose(cubeA.frame, cubeB.frame)
+            : null;
 
-
-
-
-        analysisCtx.drawImage(
-
-
-
-            video,
-
-
-
-            0,
-
-
-
-            0,
-
-
-
-            analysis.width,
-
-
-
-            analysis.height
-
-
-
-        );
-
-
-
-
-
-
-
-        const imageData =
-
-
-
-            analysisCtx.getImageData(
-
-
-
-                0,
-
-
-
-                0,
-
-
-
-                analysis.width,
-
-
-
-                analysis.height
-
-
-
-            );
-
-
-
-
-
-
-
-        imageToGray(
-
-
-
-            imageData
-
-
-
-        );
-
-
-
-
-
-
-
-        const markers =
-
-
-
-            await detector.detect(
-
-
-
-                grayBuffer,
-
-
-
-                analysis.width,
-
-
-
-                analysis.height
-
-
-
-            );
-
-
-
-
-
-
-
-        const cubeEstimate = estimateCubeCenter(markers);
-
-        let cubeCenter = null;
-        let cubeFrame = null;
-        let poseHeld = false;
-
-        if (cubeEstimate) {
-            cubeCenter = updateSmoothedCenter(cubeEstimate.center);
-            const rawFrame = estimateCubeFrame(markers, cubeCenter);
-            cubeFrame = updateSmoothedFrame(rawFrame);
-
-            if (cubeFrame) {
-                cubeFrame.origin = [...cubeCenter];
-                lastGoodCubeCenter = [...cubeCenter];
-                lastGoodCubeFrame = {
-                    origin: [...cubeCenter],
-                    x: [...cubeFrame.x],
-                    y: [...cubeFrame.y],
-                    z: [...cubeFrame.z]
-                };
-                lastGoodPoseTime = performance.now();
-            }
-        }
-
-        if (
-            (!cubeCenter || !cubeFrame) &&
-            lastGoodCubeCenter &&
-            lastGoodCubeFrame &&
-            performance.now() - lastGoodPoseTime <= POSE_HOLD_MS
-        ) {
-            cubeCenter = [...lastGoodCubeCenter];
-            cubeFrame = {
-                origin: [...lastGoodCubeCenter],
-                x: [...lastGoodCubeFrame.x],
-                y: [...lastGoodCubeFrame.y],
-                z: [...lastGoodCubeFrame.z]
-            };
-            poseHeld = true;
-        }
-
-        drawScene(markers, cubeEstimate, cubeCenter, cubeFrame);
-
-
-
-
-
-
-
-        if (
-
-
-
-            markers &&
-
-
-
-            markers.length > 0
-
-
-
-        ) {
-
-
-
-
-
-
-
-            const ids =
-
-
-
-                markers
-
-
-
-                    .map(
-
-
-
-                        marker =>
-
-
-
-                            marker.id
-
-
-
-                    )
-
-
-
-                    .join(", ");
-
-
-
-
-
-
-
-            const poseCount =
-
-
-
-                markers.filter(
-
-
-
-                    marker =>
-
-
-
-                        marker.pose &&
-
-
-
-                        marker.pose.t
-
-
-
-                ).length;
-
-
-
-
-
-
-
-            setMessage(
-
-
-
-                "POSE 3D ACTIVE ✓",
-
-
-
-                "ID : " +
-
-
-
-                ids +
-
-
-
-                " • poses : " +
-
-
-
-                poseCount +
-
-
-
-                "/" +
-
-
-
-                markers.length,
-
-
-
-                "ok"
-
-
-
-            );
-
-
-
-
-
-
-
-            if (cubeCenter) {
-
-
-
-
-
-
-
-                const xMm =
-
-
-
-                    cubeCenter[0] * 1000;
-
-
-
-
-
-
-
-                const yMm =
-
-
-
-                    cubeCenter[1] * 1000;
-
-
-
-
-
-
-
-                const zMm =
-
-
-
-                    cubeCenter[2] * 1000;
-
-
-
-
-
-
-
-                poseX.textContent =
-
-
-
-                    xMm.toFixed(1) +
-
-
-
-                    " mm";
-
-
-
-
-
-
-
-                poseY.textContent =
-
-
-
-                    yMm.toFixed(1) +
-
-
-
-                    " mm";
-
-
-
-
-
-
-
-                poseZ.textContent =
-
-
-
-                    zMm.toFixed(1) +
-
-
-
-                    " mm";
-
-
-
-
-
-
-
-
-
-                const euler =
-
-                    cubeEulerDegrees(
-
-                        cubeFrame
-
-                    );
-
-
-
-                if (euler) {
-
-                    poseRoll.textContent =
-
-                        euler.roll.toFixed(1) + "°";
-
-
-
-                    posePitch.textContent =
-
-                        euler.pitch.toFixed(1) + "°";
-
-
-
-                    poseYaw.textContent =
-
-                        euler.yaw.toFixed(1) + "°";
-
-                }
-
-                else {
-
-                    poseRoll.textContent = "—";
-
-                    posePitch.textContent = "—";
-
-                    poseYaw.textContent = "—";
-
-                }
-
-
-
-diagnostic.innerHTML =
-
-
-
-                    "<span class='ok'>" +
-
-
-
-                    "CENTRE + REPÈRE CUBE + STL ACTIFS" +
-
-
-
-                    "</span>" +
-
-
-
-                    "<br>" +
-
-
-
-                    "Tags visibles : " +
-
-
-
-                    markers.length +
-
-
-
-                    " • ID : " +
-
-
-
-                    ids +
-
-
-
-                    "<br>" +
-
-
-
-                    "X : " +
-
-
-
-                    xMm.toFixed(1) +
-
-
-
-                    " mm" +
-
-
-
-                    " • Y : " +
-
-
-
-                    yMm.toFixed(1) +
-
-
-
-                    " mm" +
-
-
-
-                    " • Z : " +
-
-
-
-                    zMm.toFixed(1) +
-
-
-
-                    " mm" +
-
-
-
-                    "<br>" +
-
-
-
-                    "Variation : " +
-
-
-
-                    (
-
-
-
-                        stabilityMm !== null
-
-
-
-                            ? stabilityMm.toFixed(2)
-
-
-
-                            : "—"
-
-
-
-                    ) +
-
-
-
-                    " mm/frame" +
-
-
-
-                    " • " +
-
-
-
-                    stabilityLabel() +
-
-
-
-                    "<br>" +
-
-
-
-                    "<span class='warning'>" +
-
-
-
-                    "Calibration métrique encore provisoire (HFOV " +
-
-
-
-                    CAMERA_HFOV_DEG +
-
-
-
-                    "°)." +
-
-
-
-                    "</span>";
-
-
-
-            }
-
-
-
-        }
-
-
-
-        else {
-            if (poseHeld && cubeCenter && cubeFrame) {
-                const xMm = cubeCenter[0] * 1000;
-                const yMm = cubeCenter[1] * 1000;
-                const zMm = cubeCenter[2] * 1000;
-                const euler = cubeEulerDegrees(cubeFrame);
-
-                poseX.textContent = xMm.toFixed(1) + " mm";
-                poseY.textContent = yMm.toFixed(1) + " mm";
-                poseZ.textContent = zMm.toFixed(1) + " mm";
-
-                if (euler) {
-                    poseRoll.textContent = euler.roll.toFixed(1) + "°";
-                    posePitch.textContent = euler.pitch.toFixed(1) + "°";
-                    poseYaw.textContent = euler.yaw.toFixed(1) + "°";
-                }
-
-                setMessage(
-                    "POSE MAINTENUE",
-                    "Tag perdu brièvement — dernière pose conservée.",
-                    "warning"
-                );
-            }
-            else {
-                drawScene([], null, null, null);
-                poseX.textContent = "—";
-                poseY.textContent = "—";
-                poseZ.textContent = "—";
-                poseRoll.textContent = "—";
-                posePitch.textContent = "—";
-                poseYaw.textContent = "—";
-
-                setMessage(
-                    "Recherche AprilTag…",
-                    "Aucun tag36h11 détecté.",
-                    "warning"
-                );
-            }
-        }
-
-
-
+        drawScene(markers);
+        updateButtonsAndGrid();
+        updateStatus(markers);
     }
-
-
-
-
-
-
-
-    catch(error) {
-
-
-
-
-
-
-
-        const message =
-
-
-
-            errorText(error);
-
-
-
-
-
-
-
-        console.error(
-
-
-
-            "Erreur détection :",
-
-
-
-            error
-
-
-
-        );
-
-
-
-
-
-
-
-        setMessage(
-
-
-
-            "Erreur détection",
-
-
-
-            message,
-
-
-
-            "error"
-
-
-
-        );
-
-
-
-
-
-
-
+    catch (error) {
+        const message = errorText(error);
+        console.error("Erreur détection :", error);
+        setMessage("Erreur détection", message, "error");
         diagnostic.innerHTML =
-
-
-
-            "<span class='error'>" +
-
-
-
-            "ERREUR DÉTECTION" +
-
-
-
-            "</span>" +
-
-
-
-            "<br>" +
-
-
-
-            escapeHtml(
-
-
-
-                message
-
-
-
-            );
-
-
-
+            "<span class='error'>ERREUR DÉTECTION</span><br>" + escapeHtml(message);
     }
-
-
-
-
-
-
-
     finally {
-
-
-
-
-
-
-
-        detectionRunning =
-
-
-
-            false;
-
-
-
+        detectionRunning = false;
     }
-
-
-
 }
-
-
-
-
-
-
-
-
-
 
 
 /* ============================================================
-
-
-
-   DESSIN
-
-
-
+   ÉTAT AFFICHÉ
 ============================================================ */
 
-
-
-
-
-
-
-function drawScene(
-
-    markers,
-
-    cubeEstimate,
-
-    cubeCenter,
-
-    cubeFrame = null
-
-) {
-
-
-
-
-
-
-
-    overlayCtx.clearRect(
-
-
-
-        0,
-
-
-
-        0,
-
-
-
-        overlay.width,
-
-
-
-        overlay.height
-
-
-
-    );
-
-
-
-
-
-
-
-    if (markers && markers.length > 0) {
-
-        markers.forEach(
-
-            function(marker) {
-
-                drawMarker(marker);
-                drawTagAxes(marker);
-
-            }
-
-        );
-
-    }
-
-
-
-    if (
-
-
-
-        cubeEstimate &&
-
-
-
-        cubeEstimate.candidates
-
-
-
-    ) {
-
-
-
-
-
-
-
-        for (
-
-
-
-            const candidate
-
-
-
-            of cubeEstimate.candidates
-
-
-
-        ) {
-
-
-
-
-
-
-
-            const p =
-
-
-
-                project3D(
-
-
-
-                    candidate.point
-
-
-
-                );
-
-
-
-
-
-
-
-            if (p) {
-
-
-
-
-
-
-
-                overlayCtx.beginPath();
-
-
-
-
-
-
-
-                overlayCtx.arc(
-
-
-
-                    p.x,
-
-
-
-                    p.y,
-
-
-
-                    5,
-
-
-
-                    0,
-
-
-
-                    Math.PI * 2
-
-
-
-                );
-
-
-
-
-
-
-
-                overlayCtx.fillStyle =
-
-
-
-                    "#ffd60a";
-
-
-
-
-
-
-
-                overlayCtx.fill();
-
-
-
-            }
-
-
-
-        }
-
-
-
-    }
-
-
-
-
-
-
-
-    if (cubeCenter) {
-
-
-
-
-
-
-
-        const center2D =
-
-
-
-            project3D(
-
-
-
-                cubeCenter
-
-
-
-            );
-
-
-
-
-
-
-
-        if (center2D) {
-
-
-
-
-
-
-
-            drawCross(
-
-
-
-                center2D.x,
-
-
-
-                center2D.y,
-
-
-
-                14,
-
-
-
-                "#ff2d55",
-
-
-
-                5
-
-
-
-            );
-
-
-
-
-
-
-
-            overlayCtx.font =
-
-
-
-                "bold 18px -apple-system";
-
-
-
-
-
-
-
-            overlayCtx.textAlign =
-
-
-
-                "center";
-
-
-
-
-
-
-
-            overlayCtx.fillStyle =
-
-
-
-                "rgba(0,0,0,.82)";
-
-
-
-
-
-
-
-            overlayCtx.fillRect(
-
-
-
-                center2D.x - 66,
-
-
-
-                center2D.y + 17,
-
-
-
-                132,
-
-
-
-                28
-
-
-
-            );
-
-
-
-
-
-
-
-            overlayCtx.fillStyle =
-
-
-
-                "#ff5b79";
-
-
-
-
-
-
-
-            overlayCtx.fillText(
-
-
-
-                "CENTRE CUBE",
-
-
-
-                center2D.x,
-
-
-
-                center2D.y + 38
-
-
-
-            );
-
-
-
-        }
-
-
-
-    }
-
-
-
-
-
-    if (cubeFrame) {
-
-        drawTrackedSTL(cubeFrame);
-        drawCubeAxes(cubeFrame);
-
-    }
-
-
-
+function cubeStateText(cube) {
+    if (cube.frame && !cube.held) return "suivi";
+    if (cube.frame && cube.held) return "pose maintenue";
+    if (cube.visibleIds.length === 1) return "1 seule face visible (2 nécessaires)";
+    if (cube.visibleIds.length > 1) return "pose incomplète";
+    return "aucun tag visible";
 }
 
-
-
-
-
-
-
-
-
-
-
-function drawMarker(
-
-
-
-    marker
-
-
-
-) {
-
-
-
-
-
-
-
-    const corners =
-
-
-
-        marker.corners;
-
-
-
-
-
-
-
-    if (
-
-
-
-        !corners ||
-
-
-
-        corners.length < 4
-
-
-
-    ) {
-
-
-
-        return;
-
-
-
-    }
-
-
-
-
-
-
-
-    /* CONTOUR */
-
-
-
-    overlayCtx.beginPath();
-
-
-
-
-
-
-
-    overlayCtx.moveTo(
-
-
-
-        corners[0].x,
-
-
-
-        corners[0].y
-
-
-
-    );
-
-
-
-
-
-
-
-    for (
-
-
-
-        let i = 1;
-
-
-
-        i < 4;
-
-
-
-        i++
-
-
-
-    ) {
-
-
-
-        overlayCtx.lineTo(
-
-
-
-            corners[i].x,
-
-
-
-            corners[i].y
-
-
-
+function updateStatus(markers) {
+    const a = !!cubeA.frame;
+    const b = !!cubeB.frame;
+
+    if (recorded) {
+        setMessage(
+            "Position enregistrée",
+            a ? "STL B fixé par rapport au cube A. Vous pouvez exporter."
+              : "Présentez le cube A pour revoir les deux STL. Vous pouvez exporter.",
+            "ok"
         );
-
-
-
     }
-
-
-
-
-
-
-
-    overlayCtx.closePath();
-
-
-
-
-
-
-
-    overlayCtx.lineWidth =
-
-
-
-        5;
-
-
-
-
-
-
-
-    overlayCtx.strokeStyle =
-
-
-
-        "#39ff74";
-
-
-
-
-
-
-
-    overlayCtx.stroke();
-
-
-
-
-
-
-
-    /* COINS NUMÉROTÉS */
-
-
-
-    corners.forEach(
-
-
-
-        function(point, index) {
-
-
-
-
-
-
-
-            overlayCtx.beginPath();
-
-
-
-
-
-
-
-            overlayCtx.arc(
-
-
-
-                point.x,
-
-
-
-                point.y,
-
-
-
-                6,
-
-
-
-                0,
-
-
-
-                Math.PI * 2
-
-
-
-            );
-
-
-
-
-
-
-
-            overlayCtx.fillStyle =
-
-
-
-                "#00c8ff";
-
-
-
-
-
-
-
-            overlayCtx.fill();
-
-
-
-
-
-
-
-            overlayCtx.font =
-
-
-
-                "bold 13px -apple-system";
-
-
-
-
-
-
-
-            overlayCtx.textAlign =
-
-
-
-                "center";
-
-
-
-
-
-
-
-            overlayCtx.fillStyle =
-
-
-
-                "white";
-
-
-
-
-
-
-
-            overlayCtx.fillText(
-
-
-
-                String(index),
-
-
-
-                point.x,
-
-
-
-                point.y - 10
-
-
-
-            );
-
-
-
-        }
-
-
-
-    );
-
-
-
-
-
-
-
-    /* CENTRE */
-
-
-
-    let centerX;
-
-
-
-    let centerY;
-
-
-
-
-
-
-
-    if (
-
-
-
-        marker.center &&
-
-
-
-        Number.isFinite(
-
-
-
-            marker.center.x
-
-
-
-        ) &&
-
-
-
-        Number.isFinite(
-
-
-
-            marker.center.y
-
-
-
-        )
-
-
-
-    ) {
-
-
-
-        centerX =
-
-
-
-            marker.center.x;
-
-
-
-
-
-
-
-        centerY =
-
-
-
-            marker.center.y;
-
-
-
+    else if (a && b) {
+        setMessage(
+            "2 cubes suivis",
+            "Touchez « Enregistrer la position » quand le placement est bon.",
+            "ok"
+        );
     }
-
-
-
+    else if (a || b) {
+        const seen = a ? cubeA : cubeB;
+        const missing = a ? cubeB : cubeA;
+        setMessage(
+            "Cube " + seen.key + " suivi",
+            "Cube " + missing.key + " : " + cubeStateText(missing) + ".",
+            "warning"
+        );
+    }
+    else if (markers.length > 0) {
+        setMessage(
+            "Pose incomplète",
+            "ID visibles : " + markers.map(m => m.id).join(", ") +
+            " • il faut 2 faces visibles par cube.",
+            "warning"
+        );
+    }
     else {
-
-
-
-
-
-
-
-        centerX =
-
-
-
-            (
-
-
-
-                corners[0].x +
-
-
-
-                corners[1].x +
-
-
-
-                corners[2].x +
-
-
-
-                corners[3].x
-
-
-
-            ) / 4;
-
-
-
-
-
-
-
-        centerY =
-
-
-
-            (
-
-
-
-                corners[0].y +
-
-
-
-                corners[1].y +
-
-
-
-                corners[2].y +
-
-
-
-                corners[3].y
-
-
-
-            ) / 4;
-
-
-
+        setMessage("Recherche AprilTag…", "Aucun tag36h11 détecté.", "warning");
     }
 
-
-
-
-
-
-
-    overlayCtx.beginPath();
-
-
-
-
-
-
-
-    overlayCtx.arc(
-
-
-
-        centerX,
-
-
-
-        centerY,
-
-
-
-        8,
-
-
-
-        0,
-
-
-
-        Math.PI * 2
-
-
-
-    );
-
-
-
-
-
-
-
-    overlayCtx.fillStyle =
-
-
-
-        "#ff3b30";
-
-
-
-
-
-
-
-    overlayCtx.fill();
-
-
-
-
-
-
-
-    /* ID */
-
-
-
-    const label =
-
-
-
-        "ID " +
-
-
-
-        marker.id;
-
-
-
-
-
-
-
-    overlayCtx.font =
-
-
-
-        "bold 24px -apple-system";
-
-
-
-
-
-
-
-    const metrics =
-
-
-
-        overlayCtx.measureText(
-
-
-
-            label
-
-
-
-        );
-
-
-
-
-
-
-
-    overlayCtx.fillStyle =
-
-
-
-        "rgba(0,0,0,.78)";
-
-
-
-
-
-
-
-    overlayCtx.fillRect(
-
-
-
-        centerX -
-
-
-
-        metrics.width / 2 -
-
-
-
-        8,
-
-
-
-        centerY - 44,
-
-
-
-        metrics.width + 16,
-
-
-
-        34
-
-
-
-    );
-
-
-
-
-
-
-
-    overlayCtx.fillStyle =
-
-
-
-        "#39ff74";
-
-
-
-
-
-
-
-    overlayCtx.textAlign =
-
-
-
-        "center";
-
-
-
-
-
-
-
-    overlayCtx.fillText(
-
-
-
-        label,
-
-
-
-        centerX,
-
-
-
-        centerY - 18
-
-
-
-    );
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-function drawTagAxes(
-
-
-
-    marker
-
-
-
-) {
-
-
-
-
-
-
-
-    if (
-
-
-
-        !marker.pose ||
-
-
-
-        !Array.isArray(marker.pose.t)
-
-
-
-    ) {
-
-
-
-        return;
-
-
-
-    }
-
-
-
-
-
-
-
-    const axes =
-
-
-
-        poseAxes(marker);
-
-
-
-
-
-
-
-    if (!axes) {
-
-
-
-        return;
-
-
-
-    }
-
-
-
-
-
-
-
-    const origin3D = [
-
-
-
-        Number(marker.pose.t[0]),
-
-
-
-        Number(marker.pose.t[1]),
-
-
-
-        Number(marker.pose.t[2])
-
-
-
-    ];
-
-
-
-
-
-
-
-    if (
-
-
-
-        !origin3D.every(
-
-
-
-            Number.isFinite
-
-
-
-        )
-
-
-
-    ) {
-
-
-
-        return;
-
-
-
-    }
-
-
-
-
-
-
-
-    /*
-
-
-
-      Axe physique de 20 mm.
-
-
-
-    */
-
-
-
-    const axisLength =
-
-
-
-        0.020;
-
-
-
-
-
-
-
-    const origin2D =
-
-
-
-        project3D(
-
-
-
-            origin3D
-
-
-
-        );
-
-
-
-
-
-
-
-    if (!origin2D) {
-
-
-
-        return;
-
-
-
-    }
-
-
-
-
-
-
-
-    const endpoints = [
-
-
-
-        {
-
-
-
-            axis: "X",
-
-
-
-            color: "#ff453a",
-
-
-
-            point:
-
-
-
-                vecAdd(
-
-
-
-                    origin3D,
-
-
-
-                    vecScale(
-
-
-
-                        axes.x,
-
-
-
-                        axisLength
-
-
-
-                    )
-
-
-
-                )
-
-
-
-        },
-
-
-
-        {
-
-
-
-            axis: "Y",
-
-
-
-            color: "#32d74b",
-
-
-
-            point:
-
-
-
-                vecAdd(
-
-
-
-                    origin3D,
-
-
-
-                    vecScale(
-
-
-
-                        axes.y,
-
-
-
-                        axisLength
-
-
-
-                    )
-
-
-
-                )
-
-
-
-        },
-
-
-
-        {
-
-
-
-            axis: "Z",
-
-
-
-            color: "#0a84ff",
-
-
-
-            point:
-
-
-
-                vecAdd(
-
-
-
-                    origin3D,
-
-
-
-                    vecScale(
-
-
-
-                        axes.z,
-
-
-
-                        axisLength
-
-
-
-                    )
-
-
-
-                )
-
-
-
+    const lines = [];
+
+    for (const cube of cubes) {
+        const f = cube.faces;
+        let line =
+            "<span class='cube" + cube.key + "'>Cube " + cube.key + "</span>" +
+            " (ID " + f.xPlus + " / " + f.yPlus + " / " + f.zPlus + ") : " +
+            cubeStateText(cube);
+
+        if (cube.visibleIds.length) {
+            line += " • tags : " + cube.visibleIds.join(", ");
         }
-
-
-
-    ];
-
-
-
-
-
-
-
-    for (
-
-
-
-        const item
-
-
-
-        of endpoints
-
-
-
-    ) {
-
-
-
-
-
-
-
-        const p =
-
-
-
-            project3D(
-
-
-
-                item.point
-
-
-
-            );
-
-
-
-
-
-
-
-        if (!p) {
-
-
-
-            continue;
-
-
-
+        if (cube.center) {
+            line += " • distance : " + (cube.center[2] * 1000).toFixed(0) + " mm";
         }
-
-
-
-
-
-
-
-        overlayCtx.beginPath();
-
-
-
-
-
-
-
-        overlayCtx.moveTo(
-
-
-
-            origin2D.x,
-
-
-
-            origin2D.y
-
-
-
-        );
-
-
-
-
-
-
-
-        overlayCtx.lineTo(
-
-
-
-            p.x,
-
-
-
-            p.y
-
-
-
-        );
-
-
-
-
-
-
-
-        overlayCtx.lineWidth =
-
-
-
-            4;
-
-
-
-
-
-
-
-        overlayCtx.strokeStyle =
-
-
-
-            item.color;
-
-
-
-
-
-
-
-        overlayCtx.stroke();
-
-
-
-
-
-
-
-        overlayCtx.font =
-
-
-
-            "bold 16px -apple-system";
-
-
-
-
-
-
-
-        overlayCtx.fillStyle =
-
-
-
-            item.color;
-
-
-
-
-
-
-
-        overlayCtx.textAlign =
-
-
-
-            "center";
-
-
-
-
-
-
-
-        overlayCtx.fillText(
-
-
-
-            item.axis,
-
-
-
-            p.x,
-
-
-
-            p.y - 4
-
-
-
-        );
-
-
-
+        if (cube.stabilityMm !== null && cube.estimate) {
+            line += " • " + stabilityLabel(cube.stabilityMm);
+        }
+        line +=
+            "<br>&nbsp;&nbsp;STL " + cube.key + " : " +
+            escapeHtml(cube.stlName) + " — " + escapeHtml(cube.stlState);
+
+        lines.push(line);
     }
 
+    const shown = recorded ? recorded.rel : lastLiveRel;
+    if (shown) {
+        lines.push(
+            (recorded ? "<span class='ok'>Position enregistrée</span>" : "Position en direct") +
+            " — distance entre centres : " + (vecLength(shown.t) * 1000).toFixed(1) + " mm"
+        );
+    }
 
+    if (recorded && lastLiveRel) {
+        const gapMm = vecLength(vecSub(lastLiveRel.t, recorded.rel.t)) * 1000;
+        const gapDeg = rotationAngleDeg(lastLiveRel, recorded.rel);
+        lines.push(
+            "Écart actuel du cube B par rapport à l'enregistrement : " +
+            gapMm.toFixed(1) + " mm • " + gapDeg.toFixed(1) + "°"
+        );
+    }
 
+    const others = markers
+        .map(m => Number(m.id))
+        .filter(id => !cubeByTagId.has(id));
+    if (others.length) {
+        lines.push("Autres tags ignorés : " + others.join(", "));
+    }
+
+    lines.push(
+        "<span class='warning'>Calibration métrique encore provisoire (HFOV " +
+        CAMERA_HFOV_DEG + "°, tag " + (TAG_SIZE_M * 1000).toFixed(0) + " mm).</span>"
+    );
+
+    diagnostic.innerHTML = lines.join("<br>");
 }
-
-
-
-
-
-
-
-
-
-
-
-function drawCross(
-
-
-
-    x,
-
-
-
-    y,
-
-
-
-    size,
-
-
-
-    color,
-
-
-
-    width
-
-
-
-) {
-
-
-
-
-
-
-
-    overlayCtx.beginPath();
-
-
-
-
-
-
-
-    overlayCtx.moveTo(
-
-
-
-        x - size,
-
-
-
-        y
-
-
-
-    );
-
-
-
-
-
-
-
-    overlayCtx.lineTo(
-
-
-
-        x + size,
-
-
-
-        y
-
-
-
-    );
-
-
-
-
-
-
-
-    overlayCtx.moveTo(
-
-
-
-        x,
-
-
-
-        y - size
-
-
-
-    );
-
-
-
-
-
-
-
-    overlayCtx.lineTo(
-
-
-
-        x,
-
-
-
-        y + size
-
-
-
-    );
-
-
-
-
-
-
-
-    overlayCtx.lineWidth =
-
-
-
-        width;
-
-
-
-
-
-
-
-    overlayCtx.strokeStyle =
-
-
-
-        color;
-
-
-
-
-
-
-
-    overlayCtx.stroke();
-
-
-
-}
-
-
-
-
-
-
-
-
-
 
 
 /* ============================================================
-
-
-
-   ARRÊT
-
-
-
+   DESSIN
 ============================================================ */
 
+const UI_FONT = "-apple-system, BlinkMacSystemFont, system-ui, sans-serif";
+const AXIS_COLORS = { X: "#ff8787", Y: "#8ce99a", Z: "#74c0fc" };
+
+function cubeColor(cube, alpha = 1) {
+    return "rgba(" + cube.color.join(", ") + ", " + alpha + ")";
+}
+
+function clearOverlay() {
+    overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
+    overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+}
+
+/* Petite étiquette arrondie, centrée sur (x, y). */
+function drawPill(text, x, y, color, size = 12) {
+    const ctx = overlayCtx;
+    ctx.save();
+    ctx.font = "600 " + size + "px " + UI_FONT;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    const h = size + 9;
+    const w = ctx.measureText(text).width + size + 4;
+
+    roundRectPath(ctx, x - w / 2, y - h / 2, w, h, h / 2);
+    ctx.fillStyle = "rgba(10, 10, 12, .62)";
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255, 255, 255, .14)";
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y + 0.5);
+    ctx.restore();
+}
+
+function drawScene(markers) {
+    clearOverlay();
+    overlayCtx.setTransform(overlayScale, 0, 0, overlayScale, 0, 0);
+
+    for (const marker of markers) drawMarker(marker);
+
+    /* STL A : toujours lié au cube A. */
+    if (cubeA.frame) drawSTL(cubeA, cubeA.frame);
+
+    /* STL B : lié au cube B en direct, ou fixé au cube A après enregistrement. */
+    if (recorded) {
+        if (cubeA.frame) drawSTL(cubeB, frameFromRelative(cubeA.frame, recorded.rel));
+    }
+    else if (cubeB.frame) {
+        drawSTL(cubeB, cubeB.frame);
+    }
+
+    for (const cube of cubes) {
+        if (cube.frame) {
+            const box = drawCubeBox(cube, cube.frame);
+            drawCubeAxes(cube.frame);
+            if (box) {
+                drawPill(
+                    "Cube " + cube.key + (cube.held ? " · maintenu" : ""),
+                    (box.minX + box.maxX) / 2,
+                    box.minY - 16,
+                    cubeColor(cube)
+                );
+            }
+        }
+        else if (cube.center) {
+            /* Une seule face visible : centre estimé, sans orientation. */
+            const c = project3D(cube.center);
+            if (c) {
+                overlayCtx.beginPath();
+                overlayCtx.arc(c.x, c.y, 7, 0, Math.PI * 2);
+                overlayCtx.lineWidth = 1.5;
+                overlayCtx.setLineDash([3, 3]);
+                overlayCtx.strokeStyle = cubeColor(cube);
+                overlayCtx.stroke();
+                overlayCtx.setLineDash([]);
+            }
+        }
+    }
+}
+
+/* Arêtes du cube. Les trois arêtes cachées sont dessinées plus discrètement. */
+function drawCubeBox(cube, frame) {
+    const h = cube.edgeM / 2;
+    const cam = [];
+    const pts = [];
+
+    for (let i = 0; i < 8; i++) {
+        const local = [(i & 1 ? h : -h), (i & 2 ? h : -h), (i & 4 ? h : -h)];
+        const c = framePointToCamera(frame, local);
+        const p = project3D(c);
+        if (!p) return null;
+        cam.push(c);
+        pts.push(p);
+    }
+
+    let far = 0;
+    for (let i = 1; i < 8; i++) if (cam[i][2] > cam[far][2]) far = i;
+
+    const ctx = overlayCtx;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    for (const hidden of [true, false]) {
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+            for (const bit of [1, 2, 4]) {
+                const j = i | bit;
+                if (j === i) continue;
+                if ((i === far || j === far) !== hidden) continue;
+                ctx.moveTo(pts[i].x, pts[i].y);
+                ctx.lineTo(pts[j].x, pts[j].y);
+            }
+        }
+        ctx.lineWidth = hidden ? 1 : 1.6;
+        ctx.setLineDash(hidden ? [4, 4] : []);
+        ctx.strokeStyle = cubeColor(cube, hidden ? 0.35 : 0.95);
+        ctx.stroke();
+    }
+
+    ctx.restore();
+
+    return {
+        minX: Math.min(...pts.map(p => p.x)),
+        maxX: Math.max(...pts.map(p => p.x)),
+        minY: Math.min(...pts.map(p => p.y)),
+        maxY: Math.max(...pts.map(p => p.y))
+    };
+}
+
+function drawCubeAxes(frame) {
+    const origin2D = project3D(frame.origin);
+    if (!origin2D) return;
+
+    const ctx = overlayCtx;
+    const axes = [["X", frame.x], ["Y", frame.y], ["Z", frame.z]];
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.font = "700 11px " + UI_FONT;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    for (const [name, vector] of axes) {
+        const tip = project3D(vecAdd(frame.origin, vecScale(vector, AXIS_LENGTH_M)));
+        if (!tip) continue;
+
+        ctx.beginPath();
+        ctx.moveTo(origin2D.x, origin2D.y);
+        ctx.lineTo(tip.x, tip.y);
+        ctx.lineWidth = 2.2;
+        ctx.strokeStyle = AXIS_COLORS[name];
+        ctx.stroke();
+
+        /* Lettre placée juste au-delà de la pointe. */
+        const dx = tip.x - origin2D.x;
+        const dy = tip.y - origin2D.y;
+        const d = Math.hypot(dx, dy) || 1;
+        ctx.fillStyle = AXIS_COLORS[name];
+        ctx.fillText(name, tip.x + dx / d * 9, tip.y + dy / d * 9);
+    }
+
+    ctx.beginPath();
+    ctx.arc(origin2D.x, origin2D.y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.restore();
+}
+
+/* Tag détecté : quatre équerres aux coins et le numéro au centre. */
+function drawMarker(marker) {
+    const c = marker.corners;
+    if (!c || c.length < 4) return;
+
+    const cube = cubeByTagId.get(Number(marker.id));
+    const color = cube ? cubeColor(cube) : "rgba(255, 255, 255, .7)";
+    const ctx = overlayCtx;
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = color;
+
+    ctx.beginPath();
+    ctx.moveTo(c[0].x, c[0].y);
+    for (let i = 1; i < 4; i++) ctx.lineTo(c[i].x, c[i].y);
+    ctx.closePath();
+    ctx.globalAlpha = 0.3;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+        const p = c[i];
+        const a = c[(i + 1) % 4];
+        const b = c[(i + 3) % 4];
+        ctx.moveTo(p.x + (a.x - p.x) * 0.2, p.y + (a.y - p.y) * 0.2);
+        ctx.lineTo(p.x, p.y);
+        ctx.lineTo(p.x + (b.x - p.x) * 0.2, p.y + (b.y - p.y) * 0.2);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    const centerX = (c[0].x + c[1].x + c[2].x + c[3].x) / 4;
+    const centerY = (c[0].y + c[1].y + c[2].y + c[3].y) / 4;
+    drawPill(String(marker.id), centerX, centerY, color, 11);
+}
 
 
-
-
-
+/* ============================================================
+   ARRÊT
+   La position enregistrée est conservée : l'export reste possible.
+============================================================ */
 
 function stopCamera() {
-
-
-
-
-
-
-
     if (animationId) {
-
-
-
-
-
-
-
-        cancelAnimationFrame(
-
-
-
-            animationId
-
-
-
-        );
-
-
-
-
-
-
-
-        animationId =
-
-
-
-            null;
-
-
-
+        cancelAnimationFrame(animationId);
+        animationId = null;
     }
-
-
-
-
-
-
 
     if (stream) {
-
-
-
-
-
-
-
-        stream
-
-
-
-            .getTracks()
-
-
-
-            .forEach(
-
-
-
-                function(track) {
-
-
-
-                    track.stop();
-
-
-
-                }
-
-
-
-            );
-
-
-
+        stream.getTracks().forEach(function(track) { track.stop(); });
     }
 
+    stream = null;
+    video.srcObject = null;
+    detectionRunning = false;
+    lastLiveRel = null;
 
+    for (const cube of cubes) resetCubeTracking(cube);
 
+    clearOverlay();
 
+    startButton.disabled = false;
+    startButton.classList.remove("hidden");
+    stopButton.classList.add("hidden");
 
-
-
-    stream =
-
-
-
-        null;
-
-
-
-
-
-
-
-    video.srcObject =
-
-
-
-        null;
-
-
-
-
-
-
-
-    detectionRunning =
-
-
-
-        false;
-
-
-
-
-
-
-
-    smoothedCubeCenter =
-
-
-
-        null;
-
-
-
-
-
-
-
-    previousCubeCenter =
-
-
-
-        null;
-
-
-
-
-
-
-
-    stabilityMm =
-
-
-
-        null;
-
-
-
-
-
-
-
-    overlayCtx.clearRect(
-
-
-
-        0,
-
-
-
-        0,
-
-
-
-        overlay.width,
-
-
-
-        overlay.height
-
-
-
-    );
-
-
-
-
-
-
-
-    poseX.textContent = "—";
-
-
-
-    poseY.textContent = "—";
-
-
-
-    poseZ.textContent = "—";
-
-
-
-            poseRoll.textContent = "—";
-
-            posePitch.textContent = "—";
-
-            poseYaw.textContent = "—";
-
-
-
-
-
-
-
-    startButton.disabled =
-
-
-
-        false;
-
-
-
-
-
-
-
-    startButton
-
-
-
-        .classList
-
-
-
-        .remove(
-
-
-
-            "hidden"
-
-
-
-        );
-
-
-
-
-
-
-
-    stopButton
-
-
-
-        .classList
-
-
-
-        .add(
-
-
-
-            "hidden"
-
-
-
-        );
-
-
-
-
-
-
+    updateButtonsAndGrid();
 
     setMessage(
-
-
-
         "Caméra arrêtée",
-
-
-
-        "Touchez Démarrer caméra pour reprendre."
-
-
-
+        recorded
+            ? "Position enregistrée conservée : l'export reste possible."
+            : "Touchez Démarrer caméra pour reprendre."
     );
-
-
-
 }
 
 
-
-
-
-
-
-
-
-
-
 /* ============================================================
-
-
-
    BOUTONS
-
-
-
 ============================================================ */
 
-
-
-
-
-
-
-startButton.addEventListener(
-
-
-
-    "click",
-
-
-
-    startCamera
-
-
-
-);
-
-
-
-
-
-
-
-stopButton.addEventListener(
-
-
-
-    "click",
-
-
-
-    stopCamera
-
-
-
-);
-
-
-
-
-
-
-
-window.addEventListener(
-
-
-
-    "pagehide",
-
-
-
-    stopCamera
-
-
-
-);
-
-
-
+startButton.addEventListener("click", startCamera);
+stopButton.addEventListener("click", stopCamera);
+recordButton.addEventListener("click", toggleRecord);
+exportAButton.addEventListener("click", function() { exportCube(cubeA); });
+exportBButton.addEventListener("click", function() { exportCube(cubeB); });
+window.addEventListener("pagehide", stopCamera);
 </script>
 
-
-
-
-
-
-
 </body>
-
-
-
 </html>
