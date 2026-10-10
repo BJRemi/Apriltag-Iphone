@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V10.1</title>
+<title>AprilTag iPad V10.2</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -193,6 +193,16 @@ button:disabled { opacity: .32; }
 .stl-item:not(:disabled) .meta { color: #52525b; }
 .stl-item.ready:not(:disabled) { background: rgb(45, 212, 191); animation: pulse 1.2s ease-in-out 3; }
 
+.precision summary { cursor: pointer; list-style: none; font-size: 14px; font-weight: 650; color: var(--text); margin: 2px 4px; }
+.precision summary::-webkit-details-marker { display: none; }
+.precision summary::after { content: " ›"; color: var(--muted); }
+.precision[open] summary::after { content: " ⌄"; }
+.precision-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.precision-head { font-size: 13px; font-weight: 650; margin: 0 4px 6px; }
+.precision-text { font-size: 12.5px; line-height: 1.55; color: #b4b4bd; margin: 0 4px 8px; }
+.precision-text a { color: var(--a); }
+.field { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 4px; font-size: 13px; color: #b4b4bd; }
+.field input { width: 96px; min-height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; font-size: 16px; text-align: right; padding: 0 10px; }
 .grid-caption { margin: 14px 4px 0; font-size: 12px; color: var(--muted); }
 
 #flash {
@@ -302,6 +312,32 @@ button:disabled { opacity: .32; }
         </label>
     </section>
 
+    <details id="precision" class="library precision">
+        <summary class="library-title">Réglages de précision</summary>
+        <div class="precision-block">
+            <div class="precision-head">1. Calibration de la caméra</div>
+            <div id="calibStatus" class="precision-text"></div>
+            <div class="precision-text">Imprimez la <a href="planche_calibration_A4.pdf" target="_blank">planche de calibration</a> à 100 %, collez-la à plat sur un carton rigide. Tenez l'iPad comme pour la mesure, à la même distance (≈ 20-30 cm). Filmez la planche entière, iPad immobile à chaque vue : de face, puis inclinée de 20 à 40° dans tous les sens, et placée dans tous les coins de l'image. Un bip signale chaque vue retenue.</div>
+            <div class="buttons">
+                <button id="calibStart">Calibrer la caméra</button>
+                <button id="calibCompute" class="hidden">Calculer</button>
+            </div>
+            <div class="buttons">
+                <button id="calibSave" class="hidden start">Enregistrer la calibration</button>
+                <button id="calibClear" class="hidden">Effacer la calibration</button>
+                <button id="focusLock" class="hidden">Bloquer la mise au point</button>
+            </div>
+        </div>
+        <div class="precision-block">
+            <div class="precision-head">2. Mesures d'impression des cubes (pied à coulisse)</div>
+            <label class="field"><span>Côté du carré noir d'un tag (mm)</span><input id="printTag" type="number" step="0.01" min="6" max="10" inputmode="decimal"></label>
+            <label class="field"><span>Du 1<sup>er</sup> au 3<sup>e</sup> point d'une rangée, centre à centre (mm)</span><input id="printDots" type="number" step="0.01" min="5" max="8.5" inputmode="decimal"></label>
+            <div class="buttons">
+                <button id="printApply">Appliquer (recharge la page)</button>
+                <button id="printReset">Valeurs nominales</button>
+            </div>
+        </div>
+    </details>
     <div id="gridCaption" class="grid-caption"></div>
     <div class="pose-grid">
         <div class="pose-box"><div class="pose-label">ΔX</div><div id="relX" class="pose-value">—</div></div>
@@ -330,9 +366,27 @@ button:disabled { opacity: .32; }
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V10.1";
+const VERSION = "V10.2";
 
-const TAG_SIZE_M = 0.008;             // côté du carré noir du tag (sans la marge blanche)
+/*
+  MESURES D'IMPRESSION (V10.2)
+  Si l'impression n'est pas exactement à l'échelle, toutes les distances
+  sont fausses du même pourcentage. On saisit dans « Réglages de précision »
+  la taille réellement mesurée au pied à coulisse :
+  - côté du carré noir d'un tag (nominal 8,00 mm) ;
+  - distance entre le 1er et le 3e point d'une rangée (nominal 6,67 mm).
+*/
+const PRINT_STORAGE_KEY = "apriltag-ipad-print-v1";
+const PRINT_NOMINAL = { tagMm: 8.0, dotSpanMm: 20 / 3 };
+const PRINT = (function() {
+    try {
+        const v = JSON.parse(localStorage.getItem(PRINT_STORAGE_KEY) || "null");
+        if (v && v.tagMm > 6 && v.tagMm < 10 && v.dotSpanMm > 5 && v.dotSpanMm < 8.5) return v;
+    }
+    catch (_) {}
+    return { ...PRINT_NOMINAL };
+})();
+const TAG_SIZE_M = PRINT.tagMm / 1000;   // côté du carré noir du tag (sans la marge blanche)
 const CAMERA_HFOV_DEG = 65;
 
 /* Résolution d'analyse limitée pour préserver Safari/iPad. */
@@ -401,7 +455,11 @@ const OVERLAY_MAX_SCALE = 2;
   - stlOffsetM : origine du STL dans le repère du cube (axes alignés).
 */
 /* Face à points : 3 × 3 points Ø 1,2 mm, pas 10/3 mm, centrés sur la face −Y. */
-const DOT_FACE = { normal: [0, -1, 0], pitchM: 0.010 / 3, diameterM: 0.0012 };
+const DOT_FACE = {
+    normal: [0, -1, 0],
+    pitchM: PRINT.dotSpanMm / 2000,
+    diameterM: 0.0012 * PRINT.dotSpanMm / PRINT_NOMINAL.dotSpanMm
+};
 
 /* Affinage de la pose */
 const FIT_MAX_RMS_PX = 2.5;          // au-delà, l'affinage est jugé faux et ignoré
@@ -793,10 +851,8 @@ function project3D(point) {
     if (!cameraModel || !point || !Number.isFinite(point[2]) || point[2] <= 0.0001) {
         return null;
     }
-    return {
-        x: cameraModel.fx * point[0] / point[2] + cameraModel.cx,
-        y: cameraModel.fy * point[1] / point[2] + cameraModel.cy
-    };
+    const p = projectWithModel(cameraModel, point);
+    return p ? { x: p[0], y: p[1] } : null;
 }
 
 /* Point exprimé dans un repère (origine + axes) -> repère caméra. */
@@ -835,6 +891,812 @@ function markerPosition(marker) {
     return t.every(Number.isFinite) ? t : null;
 }
 
+
+
+/* ============================================================
+   CALIBRATION DE LA CAMÉRA (V10.2)
+
+   Safari ne donne ni la vraie focale ni la déformation de l'objectif.
+   On les mesure avec une planche imprimée de 48 AprilTags (ID 100 à 147,
+   carrés noirs de 22 mm, pas de 30 mm) filmée sous une vingtaine d'angles.
+
+   Modèle (le même qu'OpenCV) :
+     x = X/Z, y = Y/Z, r² = x² + y²
+     x' = x (1 + k1 r² + k2 r⁴) + 2 p1 x y + p2 (r² + 2 x²)
+     y' = y (1 + k1 r² + k2 r⁴) + p1 (r² + 2 y²) + 2 p2 x y
+     u = fx x' + cx,  v = fy y' + cy
+
+   Calcul : focale de départ par la méthode de Zhang (homographies),
+   puis ajustement global (Levenberg-Marquardt) de la focale, du centre
+   optique, de la déformation ET de la position de la planche dans chaque
+   vue, sur tous les coins de tags. Les coins aberrants sont écartés.
+
+   Le résultat est gardé dans l'iPad (stockage du navigateur) pour la
+   résolution et l'orientation de la vidéo utilisées.
+============================================================ */
+
+const CALIB_BOARD = { firstId: 100, cols: 6, rows: 8, tagM: 0.022, pitchM: 0.030 };
+const CALIB_STORAGE_KEY = "apriltag-ipad-calibration-v1";
+const CALIB_MIN_TAGS = 10;            // tags de la planche visibles pour garder une vue
+const CALIB_MIN_VIEWS = 12;           // vues minimum pour calculer
+const CALIB_TARGET_VIEWS = 20;        // calcul automatique à partir de 20 vues
+const CALIB_MIN_TILTED = 8;           // vues inclinées (≥ 15°) nécessaires : sans elles la focale est mal définie
+const CALIB_STILL_PX = 1.5;           // déplacement maximal des coins entre deux images (iPad immobile)
+const CALIB_MAX_RMS_PX = 0.8;         // qualité exigée de la calibration
+
+let calibMode = false;
+let calibViews = [];
+let calibPrev = null;                 // coins de l'image précédente (immobilité)
+let calibLast = null;                 // dernière détection (dessin)
+let calibPending = null;              // résultat calculé, pas encore enregistré
+let calibActive = null;               // calibration en vigueur
+let calibNote = "";
+
+function calibBoardPoint(id) {
+    const k = id - CALIB_BOARD.firstId;
+    if (k < 0 || k >= CALIB_BOARD.cols * CALIB_BOARD.rows) return null;
+    const col = k % CALIB_BOARD.cols, row = Math.floor(k / CALIB_BOARD.cols);
+    return [col * CALIB_BOARD.pitchM, row * CALIB_BOARD.pitchM];
+}
+
+function calibBoardCorners(id) {
+    const c = calibBoardPoint(id);
+    if (!c) return null;
+    const h = CALIB_BOARD.tagM / 2;
+    return [[c[0] - h, c[1] - h], [c[0] + h, c[1] - h], [c[0] + h, c[1] + h], [c[0] - h, c[1] + h]];
+}
+
+/* ---------- Projection avec déformation ---------- */
+
+function distortNormalized(x, y, m) {
+    const r2 = x * x + y * y;
+    const radial = 1 + (m.k1 || 0) * r2 + (m.k2 || 0) * r2 * r2;
+    const p1 = m.p1 || 0, p2 = m.p2 || 0;
+    return [
+        x * radial + 2 * p1 * x * y + p2 * (r2 + 2 * x * x),
+        y * radial + p1 * (r2 + 2 * y * y) + 2 * p2 * x * y
+    ];
+}
+
+function projectWithModel(m, c) {
+    if (c[2] <= 1e-4) return null;
+    const d = distortNormalized(c[0] / c[2], c[1] / c[2], m);
+    return [m.fx * d[0] + m.cx, m.fy * d[1] + m.cy];
+}
+
+/* Pixel -> coordonnées normalisées sans déformation (inversion itérative). */
+function undistortPixel(m, u, v) {
+    const xd = (u - m.cx) / m.fx, yd = (v - m.cy) / m.fy;
+    let x = xd, y = yd;
+    for (let i = 0; i < 8; i++) {
+        const d = distortNormalized(x, y, m);
+        x += xd - d[0];
+        y += yd - d[1];
+    }
+    return [x, y];
+}
+
+/* ---------- Homographie planche -> image ---------- */
+
+function homographyFrom(src, dst) {
+    if (src.length < 4) return null;
+    const norm = pts => {
+        let mx = 0, my = 0;
+        for (const p of pts) { mx += p[0]; my += p[1]; }
+        mx /= pts.length; my /= pts.length;
+        let d = 0;
+        for (const p of pts) d += Math.hypot(p[0] - mx, p[1] - my);
+        const s = Math.SQRT2 / Math.max(d / pts.length, 1e-12);
+        return { mx, my, s };
+    };
+    const ns = norm(src), nd = norm(dst);
+    const A = Array.from({ length: 8 }, () => new Array(8).fill(0));
+    const b = new Array(8).fill(0);
+    for (let i = 0; i < src.length; i++) {
+        const X = (src[i][0] - ns.mx) * ns.s, Y = (src[i][1] - ns.my) * ns.s;
+        const u = (dst[i][0] - nd.mx) * nd.s, v = (dst[i][1] - nd.my) * nd.s;
+        const rows = [[X, Y, 1, 0, 0, 0, -u * X, -u * Y, u], [0, 0, 0, X, Y, 1, -v * X, -v * Y, v]];
+        for (const r of rows) {
+            for (let a = 0; a < 8; a++) {
+                b[a] += r[a] * r[8];
+                for (let c = 0; c < 8; c++) A[a][c] += r[a] * r[c];
+            }
+        }
+    }
+    const h = solveLinear(A, b);
+    if (!h) return null;
+    const Hn = [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1]];
+    /* H = Td⁻¹ · Hn · Ts */
+    const Ts = [[ns.s, 0, -ns.s * ns.mx], [0, ns.s, -ns.s * ns.my], [0, 0, 1]];
+    const TdInv = [[1 / nd.s, 0, nd.mx], [0, 1 / nd.s, nd.my], [0, 0, 1]];
+    const mul = (P, Q) => P.map((row, i) => Q[0].map((_, j) => row[0] * Q[0][j] + row[1] * Q[1][j] + row[2] * Q[2][j]));
+    const H = mul(mul(TdInv, Hn), Ts);
+    const s = H[2][2];
+    return H.map(row => row.map(v => v / s));
+}
+
+function applyHomography(H, p) {
+    const w = H[2][0] * p[0] + H[2][1] * p[1] + H[2][2];
+    return [(H[0][0] * p[0] + H[0][1] * p[1] + H[0][2]) / w, (H[1][0] * p[0] + H[1][1] * p[1] + H[1][2]) / w];
+}
+
+/*
+  Associe les coins détectés aux coins de la planche : homographie sur les
+  centres des tags (indépendante de l'ordre des coins), puis chaque coin
+  détecté est rattaché au coin prévu le plus proche.
+*/
+function calibObservations(markers) {
+    const tags = markers.filter(m => calibBoardPoint(Number(m.id)) && m.corners && m.corners.length === 4);
+    if (tags.length < 4) return null;
+    const centers = tags.map(m => [m.corners.reduce((s, c) => s + c.x, 0) / 4, m.corners.reduce((s, c) => s + c.y, 0) / 4]);
+    const H0 = homographyFrom(tags.map(m => calibBoardPoint(Number(m.id))), centers);
+    if (!H0) return null;
+
+    const pts = [];
+    for (const m of tags) {
+        const known = calibBoardCorners(Number(m.id));
+        const proj = known.map(P => applyHomography(H0, P));
+        const side = Math.hypot(proj[1][0] - proj[0][0], proj[1][1] - proj[0][1]);
+        const used = new Set();
+        let ok = true;
+        const local = [];
+        for (const c of m.corners) {
+            let best = -1, bestD = Infinity;
+            for (let k = 0; k < 4; k++) {
+                const d = Math.hypot(proj[k][0] - c.x, proj[k][1] - c.y);
+                if (d < bestD) { bestD = d; best = k; }
+            }
+            if (used.has(best) || bestD > 0.3 * side) { ok = false; break; }
+            used.add(best);
+            local.push({ X: known[best][0], Y: known[best][1], u: c.x, v: c.y, id: Number(m.id) });
+        }
+        if (ok) pts.push(...local);
+    }
+    if (pts.length < 4 * CALIB_MIN_TAGS) return { pts, H: null, tags: pts.length / 4 };
+    const H = homographyFrom(pts.map(p => [p.X, p.Y]), pts.map(p => [p.u, p.v]));
+    return { pts, H, tags: pts.length / 4 };
+}
+
+/* Pose de la planche à partir de l'homographie et d'une focale connue (sans déformation). */
+function poseFromHomography(H, m) {
+    const Kinv = c => [(c[0] - m.cx * c[2]) / m.fx, (c[1] - m.cy * c[2]) / m.fy, c[2]];
+    const h1 = Kinv([H[0][0], H[1][0], H[2][0]]);
+    const h2 = Kinv([H[0][1], H[1][1], H[2][1]]);
+    const h3 = Kinv([H[0][2], H[1][2], H[2][2]]);
+    let lambda = 2 / (vecLength(h1) + vecLength(h2));
+    let t = vecScale(h3, lambda);
+    if (t[2] < 0) { lambda = -lambda; t = vecScale(t, -1); }
+    const x = vecNormalize(vecScale(h1, lambda));
+    const yRaw = vecScale(h2, lambda);
+    const z = vecNormalize(vecCross(x, yRaw));
+    const y = vecCross(z, x);
+    return { R: [x, y, z], t };
+}
+
+/* Focale de départ (méthode de Zhang, centre optique au milieu, pixels carrés). */
+function zhangFocal(Hs, cx, cy) {
+    let num = 0, den = 0;
+    for (const Hraw of Hs) {
+        /* Homographie ramenée à une norme unité (échelle arbitraire). */
+        let n2 = 0;
+        for (const row of Hraw) for (let j = 0; j < 2; j++) n2 += row[j] * row[j];
+        const H0 = Hraw.map(row => row.map(v => v / Math.sqrt(n2)));
+        /* Centre optique ramené à l'origine. */
+        const H = [
+            [H0[0][0] - cx * H0[2][0], H0[0][1] - cx * H0[2][1]],
+            [H0[1][0] - cy * H0[2][0], H0[1][1] - cy * H0[2][1]],
+            [H0[2][0], H0[2][1]]
+        ];
+        const eqs = [
+            [H[0][0] * H[0][1] + H[1][0] * H[1][1], H[2][0] * H[2][1]],
+            [H[0][0] ** 2 + H[1][0] ** 2 - H[0][1] ** 2 - H[1][1] ** 2, H[2][0] ** 2 - H[2][1] ** 2]
+        ];
+        /* a / f² + b = 0, inconnue w = 1 / f² (moindres carrés) */
+        for (const [a, b] of eqs) {
+            num += a * b;
+            den += a * a;
+        }
+    }
+    const w = -num / den;
+    return w > 0 ? 1 / Math.sqrt(w) : null;
+}
+
+/* ---------- Ajustement global ---------- */
+
+const CALIB_PARAMS = ["fx", "fy", "cx", "cy", "k1", "k2", "p1", "p2"];
+
+function calibResiduals(model, views) {
+    let n = 0;
+    for (const v of views) n += v.pts.length;
+    const r = new Float64Array(n * 2);
+    let i = 0;
+    for (const v of views) {
+        for (const p of v.pts) {
+            const q = projectWithModel(model, poseToCamera(v.pose, [p.X, p.Y, 0]));
+            if (!q) return null;
+            r[i++] = q[0] - p.u;
+            r[i++] = q[1] - p.v;
+        }
+    }
+    return r;
+}
+
+function viewResiduals(model, view, pose) {
+    const r = new Float64Array(view.pts.length * 2);
+    let i = 0;
+    for (const p of view.pts) {
+        const q = projectWithModel(model, poseToCamera(pose, [p.X, p.Y, 0]));
+        if (!q) return null;
+        r[i++] = q[0] - p.u;
+        r[i++] = q[1] - p.v;
+    }
+    return r;
+}
+
+function calibrateLM(model, views, iterations) {
+    const nI = CALIB_PARAMS.length;
+    const P = nI + 6 * views.length;
+    const iSteps = { fx: 0.05, fy: 0.05, cx: 0.01, cy: 0.01, k1: 1e-5, k2: 1e-5, p1: 1e-6, p2: 1e-6 };
+    const vSteps = [1e-6, 1e-6, 1e-6, 1e-7, 1e-7, 1e-7];
+
+    let r = calibResiduals(model, views);
+    if (!r) return null;
+    let cost = sumSquares(r);
+    let lambda = 1e-3;
+    let JtJ = null;
+
+    for (let it = 0; it < iterations; it++) {
+        /* Jacobien par blocs : intrinsèques (toutes les mesures), pose (mesures de sa vue). */
+        const Ji = CALIB_PARAMS.map(key => {
+            const m2 = { ...model, [key]: model[key] + iSteps[key] };
+            const rk = calibResiduals(m2, views);
+            const col = new Float64Array(r.length);
+            for (let i = 0; i < r.length; i++) col[i] = (rk[i] - r[i]) / iSteps[key];
+            return col;
+        });
+        const A = Array.from({ length: P }, () => new Float64Array(P));
+        const g = new Float64Array(P);
+        for (let a = 0; a < nI; a++) {
+            for (let b = a; b < nI; b++) {
+                let s = 0;
+                for (let i = 0; i < r.length; i++) s += Ji[a][i] * Ji[b][i];
+                A[a][b] = A[b][a] = s;
+            }
+            let s = 0;
+            for (let i = 0; i < r.length; i++) s += Ji[a][i] * r[i];
+            g[a] = -s;
+        }
+        let offset = 0;
+        views.forEach((v, vi) => {
+            const n = v.pts.length * 2;
+            const r0 = r.subarray(offset, offset + n);
+            const Jv = vSteps.map((step, k) => {
+                const d = [0, 0, 0, 0, 0, 0];
+                d[k] = step;
+                const rk = viewResiduals(model, v, applyDelta(v.pose, d));
+                const col = new Float64Array(n);
+                for (let i = 0; i < n; i++) col[i] = (rk[i] - r0[i]) / step;
+                return col;
+            });
+            const base = nI + 6 * vi;
+            for (let a = 0; a < 6; a++) {
+                for (let b = a; b < 6; b++) {
+                    let s = 0;
+                    for (let i = 0; i < n; i++) s += Jv[a][i] * Jv[b][i];
+                    A[base + a][base + b] = A[base + b][base + a] = s;
+                }
+                let s = 0;
+                for (let i = 0; i < n; i++) s += Jv[a][i] * r0[i];
+                g[base + a] = -s;
+                for (let c = 0; c < nI; c++) {
+                    let t = 0;
+                    for (let i = 0; i < n; i++) t += Jv[a][i] * Ji[c][offset + i];
+                    A[base + a][c] = A[c][base + a] = t;
+                }
+            }
+            offset += n;
+        });
+        JtJ = A;
+
+        let improved = false;
+        for (let attempt = 0; attempt < 8 && !improved; attempt++) {
+            const Ad = A.map((row, i) => Array.from(row, (v, j) => (i === j ? v * (1 + lambda) + 1e-9 : v)));
+            const d = solveLinear(Ad, Array.from(g));
+            if (!d) { lambda *= 10; continue; }
+            const m2 = { ...model };
+            CALIB_PARAMS.forEach((key, k) => { m2[key] += d[k]; });
+            const v2 = views.map((v, vi) => ({ ...v, pose: applyDelta(v.pose, d.slice(nI + 6 * vi, nI + 6 * vi + 6)) }));
+            const rc = calibResiduals(m2, v2);
+            if (rc && sumSquares(rc) < cost) {
+                const previous = cost;
+                model = m2;
+                views = v2;
+                r = rc;
+                cost = sumSquares(rc);
+                lambda = Math.max(lambda / 4, 1e-9);
+                improved = true;
+                if (previous - cost < 1e-9 * previous) it = iterations;
+            }
+            else {
+                lambda *= 10;
+            }
+        }
+        if (!improved) break;
+    }
+    const rms = Math.sqrt(cost / (r.length / 2));
+    /* Incertitude de la focale : (JᵀJ)⁻¹ · σ² */
+    let fStd = null;
+    if (JtJ) {
+        const e = new Array(JtJ.length).fill(0);
+        e[0] = 1;
+        const col = solveLinear(JtJ.map(row => Array.from(row)), e);
+        const dof = Math.max(1, r.length - JtJ.length);
+        if (col && col[0] > 0) fStd = Math.sqrt(col[0] * cost / dof);
+    }
+    return { model, views, rms, fStd, residuals: r };
+}
+
+function runCalibration(views, width, height) {
+    const cx = width / 2, cy = height / 2;
+    const Hs = views.map(v => v.H);
+    const fDefault = (Math.max(width, height) / 2) / Math.tan(CAMERA_HFOV_DEG * Math.PI / 360);
+    let f0 = zhangFocal(Hs, cx, cy);
+    if (!f0 || f0 < 0.5 * fDefault || f0 > 2 * fDefault) f0 = fDefault;
+
+    let model = { fx: f0, fy: f0, cx, cy, k1: 0, k2: 0, p1: 0, p2: 0 };
+    let work = views.map(v => ({ pts: v.pts, pose: poseFromHomography(v.H, model) }));
+
+    let fit = calibrateLM(model, work, 40);
+    if (!fit) return null;
+
+    /* Coins aberrants (> 3 σ et > 1 px) retirés, puis nouveau calcul. */
+    let i = 0, removed = 0;
+    const limit = Math.max(1.0, 3 * fit.rms);
+    const cleaned = fit.views.map(v => {
+        const pts = v.pts.filter(() => {
+            const e = Math.hypot(fit.residuals[i], fit.residuals[i + 1]);
+            i += 2;
+            return e <= limit;
+        });
+        removed += v.pts.length - pts.length;
+        return { pts, pose: v.pose };
+    }).filter(v => v.pts.length >= 4 * CALIB_MIN_TAGS);
+    if (removed) {
+        const refit = calibrateLM(fit.model, cleaned, 30);
+        if (refit) fit = refit;
+    }
+
+    const m = fit.model;
+    return {
+        width, height,
+        videoWidth: cameraModel ? cameraModel.videoWidth : width,
+        videoHeight: cameraModel ? cameraModel.videoHeight : height,
+        fx: m.fx, fy: m.fy, cx: m.cx, cy: m.cy, k1: m.k1, k2: m.k2, p1: m.p1, p2: m.p2,
+        rms: fit.rms,
+        fStd: fit.fStd,
+        views: fit.views.length,
+        points: fit.views.reduce((s, v) => s + v.pts.length, 0),
+        removed,
+        hfovDeg: 2 * Math.atan((Math.max(width, height) / 2) / m.fx) * 180 / Math.PI,
+        date: new Date().toISOString()
+    };
+}
+
+/* ---------- Capture des vues ---------- */
+
+function boardNormalAndCenter(H) {
+    const pose = poseFromHomography(H, cameraModel);
+    const mid = [(CALIB_BOARD.cols - 1) * CALIB_BOARD.pitchM / 2, (CALIB_BOARD.rows - 1) * CALIB_BOARD.pitchM / 2];
+    const c = applyHomography(H, mid);
+    const tilt = Math.acos(Math.min(1, Math.abs(pose.R[2][2]))) * 180 / Math.PI;
+    return { normal: pose.R[2], center: c, tilt };
+}
+
+function calibProcess(markers) {
+    const obs = calibObservations(markers);
+    calibLast = obs;
+    if (!obs || !obs.H) {
+        calibPrev = null;
+        return { state: "board", tags: obs ? obs.tags : 0 };
+    }
+
+    /* iPad immobile : coins quasi identiques à l'image précédente. */
+    let still = false;
+    if (calibPrev) {
+        const prev = new Map(calibPrev.map(p => [p.id + ":" + p.X + ":" + p.Y, p]));
+        let s = 0, n = 0;
+        for (const p of obs.pts) {
+            const q = prev.get(p.id + ":" + p.X + ":" + p.Y);
+            if (q) { s += Math.hypot(p.u - q.u, p.v - q.v); n++; }
+        }
+        still = n >= 4 * CALIB_MIN_TAGS && s / n < CALIB_STILL_PX;
+    }
+    calibPrev = obs.pts;
+    if (!still) return { state: "move", tags: obs.tags };
+
+    const sharp = frameBlur(markers.filter(m => calibBoardPoint(Number(m.id))));
+    if (sharp && sharp.sigma > 1.5) return { state: "blur", tags: obs.tags };
+
+    const geo = boardNormalAndCenter(obs.H);
+    const diag = Math.hypot(analysis.width, analysis.height);
+    let novelty = Infinity;
+    for (const v of calibViews) {
+        const angle = Math.acos(Math.min(1, Math.max(-1, vecDot(geo.normal, v.normal)))) * 180 / Math.PI;
+        const shift = Math.hypot(geo.center[0] - v.center[0], geo.center[1] - v.center[1]) / diag;
+        novelty = Math.min(novelty, angle / 8 + shift / 0.12);
+    }
+    if (novelty < 1) return { state: "same", tags: obs.tags, tilt: geo.tilt };
+
+    calibViews.push({ pts: obs.pts, H: obs.H, normal: geo.normal, center: geo.center, tilt: geo.tilt });
+    beep(1320, 0.06);
+    if (calibViews.length >= CALIB_TARGET_VIEWS && calibTiltedCount() >= CALIB_MIN_TILTED && !calibPending) computeCalibration();
+    return { state: "added", tags: obs.tags, tilt: geo.tilt };
+}
+
+function calibTiltedCount() {
+    return calibViews.filter(v => v.tilt >= 15).length;
+}
+
+function computeCalibration() {
+    try {
+        calibPending = runCalibration(calibViews, analysis.width, analysis.height);
+    }
+    catch (error) {
+        console.error(error);
+        calibPending = null;
+    }
+    if (!calibPending) calibNote = "<span class='error'>Calcul impossible : reprenez des vues plus variées.</span>";
+    updateCalibUI();
+}
+
+/* ---------- Mémoire et application ---------- */
+
+function loadStoredCalibration() {
+    try {
+        const raw = localStorage.getItem(CALIB_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    }
+    catch (_) {
+        return null;
+    }
+}
+
+function storeCalibration(c) {
+    try {
+        if (c) localStorage.setItem(CALIB_STORAGE_KEY, JSON.stringify(c));
+        else localStorage.removeItem(CALIB_STORAGE_KEY);
+        return true;
+    }
+    catch (_) {
+        return false;
+    }
+}
+
+/* Calibration adaptée à la taille d'analyse actuelle (même cadrage requis). */
+function calibrationFor(c, width, height) {
+    if (!c) return { model: null, note: "" };
+    const sameAspect = Math.abs(c.width / c.height - width / height) < 0.002;
+    if (!sameAspect) {
+        const swapped = Math.abs(c.width / c.height - height / width) < 0.002;
+        return {
+            model: null,
+            note: swapped
+                ? "Calibration faite dans l'autre orientation (" + c.width + " × " + c.height + ") : tenez l'iPad comme pendant la calibration."
+                : "Calibration faite pour un autre format vidéo (" + c.width + " × " + c.height + ") : refaites-la."
+        };
+    }
+    const s = width / c.width;
+    return {
+        model: { fx: c.fx * s, fy: c.fy * s, cx: c.cx * s, cy: c.cy * s, k1: c.k1, k2: c.k2, p1: c.p1, p2: c.p2 },
+        note: ""
+    };
+}
+
+function applyCalibrationToCamera() {
+    if (!cameraModel || !analysis.width) return;
+    const { model, note } = calibrationFor(loadStoredCalibration(), analysis.width, analysis.height);
+    calibNote = note ? "<span class='warning'>" + escapeHtml(note) + "</span>" : "";
+    if (model) {
+        Object.assign(cameraModel, model, { calibrated: true });
+        calibActive = loadStoredCalibration();
+    }
+    else {
+        const fx = baseFocal * focalScale;
+        Object.assign(cameraModel, { fx, fy: fx, cx: analysis.width / 2, cy: analysis.height / 2, k1: 0, k2: 0, p1: 0, p2: 0, calibrated: false });
+        calibActive = null;
+    }
+    if (detector) detector.setCameraInfo(cameraModel.fx, cameraModel.fy, cameraModel.cx, cameraModel.cy);
+}
+
+/* ============================================================
+   NETTETÉ DE L'IMAGE (V10.2)
+
+   Sur chaque bord de tag, on relève le profil de gris perpendiculaire
+   au bord. Plus la transition noir -> blanc est large, plus l'image est
+   floue (mise au point ou bougé). Largeur exprimée en « sigma » de flou,
+   en pixels : ~0,6-1 px pour une image nette.
+
+   Une image nettement plus floue que les meilleures images récentes
+   n'apporte pas de mesure aux liaisons entre cubes.
+============================================================ */
+
+const BLUR_FLOOR_PX = 1.0;            // en dessous, l'image est toujours acceptée
+const BLUR_RATIO = 1.4;               // refus au-delà de 1,4 × le flou des meilleures images récentes
+const BLUR_HISTORY = 60;
+
+let blurHistory = [];
+let lastBlur = null;
+let frameBlurry = false;
+
+function sampleGray(x, y) {
+    const w = analysis.width, h = analysis.height;
+    x -= DOT_PIXEL_OFFSET;
+    y -= DOT_PIXEL_OFFSET;
+    const x0 = Math.floor(x), y0 = Math.floor(y);
+    if (x0 < 0 || y0 < 0 || x0 + 1 >= w || y0 + 1 >= h) return null;
+    const fx = x - x0, fy = y - y0;
+    const i = y0 * w + x0;
+    return (grayBuffer[i] * (1 - fx) + grayBuffer[i + 1] * fx) * (1 - fy) +
+           (grayBuffer[i + w] * (1 - fx) + grayBuffer[i + w + 1] * fx) * fy;
+}
+
+function tagEdgeBlur(marker) {
+    const c = marker.corners;
+    if (!c || c.length < 4) return null;
+    const cx = (c[0].x + c[1].x + c[2].x + c[3].x) / 4, cy = (c[0].y + c[1].y + c[2].y + c[3].y) / 4;
+    const sigmas = [];
+    for (let e = 0; e < 4; e++) {
+        const a = c[e], b = c[(e + 1) % 4];
+        const len = Math.hypot(b.x - a.x, b.y - a.y);
+        if (len < 16) continue;
+        let nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len;
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        if (nx * (mx - cx) + ny * (my - cy) < 0) { nx = -nx; ny = -ny; }     // normale vers l'extérieur (blanc)
+        const reach = Math.min(4, len * 0.08);
+        for (const t of [0.3, 0.4, 0.5, 0.6, 0.7]) {
+            const px = a.x + (b.x - a.x) * t, py = a.y + (b.y - a.y) * t;
+            const prof = [];
+            for (let s = -reach; s <= reach + 1e-9; s += 0.5) {
+                const g = sampleGray(px + nx * s, py + ny * s);
+                if (g === null) { prof.length = 0; break; }
+                prof.push(g);
+            }
+            if (prof.length < 7) continue;
+            const lo = Math.min(prof[0], prof[1]), hi = Math.max(prof[prof.length - 1], prof[prof.length - 2]);
+            const contrast = hi - lo;
+            if (contrast < 30) continue;
+            let gmax = 0;
+            for (let k = 1; k < prof.length - 1; k++) gmax = Math.max(gmax, (prof[k + 1] - prof[k - 1]) / 1.0);   // pas de 0,5 px : (Δ)/(2 × 0,5)
+            if (gmax <= 0) continue;
+            sigmas.push(contrast / (gmax * Math.sqrt(2 * Math.PI)));
+        }
+    }
+    return sigmas.length >= 4 ? median(sigmas) : null;
+}
+
+function frameBlur(markers) {
+    const values = markers.map(tagEdgeBlur).filter(v => v !== null && Number.isFinite(v));
+    if (!values.length) return null;
+    return { sigma: median(values), n: values.length };
+}
+
+function updateBlur(markers) {
+    lastBlur = frameBlur(markers);
+    frameBlurry = false;
+    if (!lastBlur) return;
+    const sorted = [...blurHistory].sort((p, q) => p - q);
+    const ref = sorted.length >= 10 ? sorted[Math.floor(sorted.length * 0.2)] : null;
+    lastBlur.ref = ref;
+    frameBlurry = ref !== null && lastBlur.sigma > Math.max(BLUR_FLOOR_PX, BLUR_RATIO * ref);
+    blurHistory.push(lastBlur.sigma);
+    if (blurHistory.length > BLUR_HISTORY) blurHistory.shift();
+}
+
+function beep(freq, duration) {
+    try {
+        if (!audioCtx) return;
+        const t = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.18, t + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + duration + 0.02);
+    }
+    catch (_) {}
+}
+
+
+/* ============================================================
+   MISE AU POINT BLOQUÉE (si Safari le permet)
+
+   La focale réelle change légèrement avec la mise au point. La bloquer
+   après la calibration garde la focale mesurée. Selon la version d'iOS,
+   Safari ne propose pas toujours ce réglage : le bouton est alors masqué.
+============================================================ */
+
+let focusLocked = false;
+let focusSupport = "inconnu";
+
+function videoTrack() {
+    return stream ? stream.getVideoTracks()[0] : null;
+}
+
+function detectFocusSupport() {
+    const track = videoTrack();
+    const caps = track && track.getCapabilities ? track.getCapabilities() : null;
+    const modes = caps && caps.focusMode ? caps.focusMode : [];
+    if (modes.includes("manual") || modes.includes("single-shot") || (caps && caps.focusDistance)) focusSupport = "oui";
+    else focusSupport = "non";
+    updateCalibUI();
+}
+
+async function toggleFocusLock() {
+    const track = videoTrack();
+    if (!track) return;
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    const modes = caps.focusMode || [];
+    try {
+        if (!focusLocked) {
+            const settings = track.getSettings ? track.getSettings() : {};
+            const c = {};
+            if (modes.includes("manual")) c.focusMode = "manual";
+            else if (modes.includes("single-shot")) c.focusMode = "single-shot";
+            if (caps.focusDistance && Number.isFinite(settings.focusDistance)) c.focusDistance = settings.focusDistance;
+            await track.applyConstraints({ advanced: [c] });
+            focusLocked = true;
+        }
+        else {
+            if (modes.includes("continuous")) await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+            focusLocked = false;
+        }
+    }
+    catch (error) {
+        focusSupport = "refusé (" + errorText(error) + ")";
+    }
+    updateCalibUI();
+}
+
+
+/* ============================================================
+   RÉGLAGES DE PRÉCISION : interface
+============================================================ */
+
+function fmt(v, d) { return Number.isFinite(v) ? v.toFixed(d) : "—"; }
+
+function updateCalibUI() {
+    const el = document.getElementById("calibStatus");
+    if (!el) return;
+    const stored = loadStoredCalibration();
+    const lines = [];
+    if (calibMode) {
+        lines.push("<b>Calibration en cours</b> : " + calibViews.length + " / " + CALIB_TARGET_VIEWS + " vues, dont " +
+            calibTiltedCount() + " / " + CALIB_MIN_TILTED + " inclinées.");
+    }
+    if (calibPending) {
+        const p = calibPending;
+        const good = p.rms <= CALIB_MAX_RMS_PX;
+        lines.push("<span class='" + (good ? "ok" : "warning") + "'>Résultat</span> : focale " + fmt(p.fx, 1) + " px" +
+            (p.fStd ? " ± " + fmt(p.fStd, 1) : "") + " (angle de vue " + fmt(p.hfovDeg, 2) + "°), centre " +
+            fmt(p.cx, 1) + " ; " + fmt(p.cy, 1) + ", déformation k1 " + fmt(p.k1, 4) + " k2 " + fmt(p.k2, 4) +
+            ", écart résiduel <b>" + fmt(p.rms, 2) + " px</b> sur " + p.points + " coins (" + p.views + " vues" +
+            (p.removed ? ", " + p.removed + " coins écartés" : "") + ")." +
+            (good ? "" : " Écart trop grand : planche pas plane, images floues ou vues trop semblables."));
+    }
+    if (stored) {
+        lines.push("<span class='ok'>Calibration enregistrée</span> le " + new Date(stored.date).toLocaleString("fr-FR") +
+            " : angle de vue " + fmt(stored.hfovDeg, 2) + "°, écart " + fmt(stored.rms, 2) + " px, pour " +
+            stored.width + " × " + stored.height + ".");
+    }
+    else if (!calibMode && !calibPending) {
+        lines.push("<span class='warning'>Caméra non calibrée</span> : focale supposée (angle de vue " + CAMERA_HFOV_DEG + "°), sans correction de déformation.");
+    }
+    if (calibNote) lines.push(calibNote);
+    lines.push("Mise au point bloquable : " + escapeHtml(focusSupport) + (focusLocked ? " — <span class='ok'>bloquée</span>" : ""));
+    el.innerHTML = lines.join("<br>");
+
+    const startCal = document.getElementById("calibStart");
+    const compute = document.getElementById("calibCompute");
+    const save = document.getElementById("calibSave");
+    const clear = document.getElementById("calibClear");
+    const focus = document.getElementById("focusLock");
+    startCal.textContent = calibMode ? "Quitter la calibration" : "Calibrer la caméra";
+    startCal.disabled = !stream;
+    compute.classList.toggle("hidden", !calibMode);
+    compute.disabled = calibViews.length < CALIB_MIN_VIEWS;
+    save.classList.toggle("hidden", !calibPending);
+    save.disabled = !calibPending || calibPending.rms > 2 * CALIB_MAX_RMS_PX;
+    clear.classList.toggle("hidden", !stored || calibMode);
+    focus.classList.toggle("hidden", focusSupport !== "oui" && !focusLocked);
+    focus.textContent = focusLocked ? "Libérer la mise au point" : "Bloquer la mise au point";
+}
+
+function toggleCalibMode() {
+    calibMode = !calibMode;
+    calibViews = [];
+    calibPrev = null;
+    calibLast = null;
+    calibPending = null;
+    if (calibMode) {
+        /* Mesures faites avec l'ancienne caméra : on repart de zéro après la calibration. */
+        setMessage("Calibration", "Filmez la planche imprimée, iPad immobile à chaque vue.", "warning");
+    }
+    else {
+        restartMeasure();
+    }
+    updateCalibUI();
+}
+
+function saveCalibration() {
+    if (!calibPending) return;
+    if (!storeCalibration(calibPending)) {
+        calibNote = "<span class='error'>Impossible d'enregistrer dans ce navigateur (navigation privée ?).</span>";
+    }
+    calibPending = null;
+    calibMode = false;
+    calibViews = [];
+    applyCalibrationToCamera();
+    restartMeasure();
+    signalValidation();
+    updateCalibUI();
+}
+
+function clearCalibration() {
+    if (!confirm("Effacer la calibration de la caméra ?")) return;
+    storeCalibration(null);
+    applyCalibrationToCamera();
+    restartMeasure();
+    updateCalibUI();
+}
+
+function calibStatusMessage(res) {
+    const n = calibViews.length;
+    const tilted = calibTiltedCount();
+    const prefix = "Vues " + n + " / " + CALIB_TARGET_VIEWS + " • inclinées " + tilted + " / " + CALIB_MIN_TILTED;
+    if (calibPending) {
+        setMessage("Calibration calculée", "Écart " + fmt(calibPending.rms, 2) + " px. Touchez « Enregistrer la calibration ».",
+            calibPending.rms <= CALIB_MAX_RMS_PX ? "ok" : "warning");
+        return;
+    }
+    const hint = tilted < CALIB_MIN_TILTED
+        ? "Inclinez la planche de 20 à 40° (haut, bas, gauche, droite)."
+        : "Changez de position : planche dans les coins et sur les bords de l'image.";
+    const texts = {
+        board: "Planche non vue en entier (" + (res.tags || 0) + " tags) : reculez un peu, " + CALIB_MIN_TAGS + " tags au moins.",
+        move: "Tenez l'iPad immobile une seconde.",
+        blur: "Image floue : immobilisez l'iPad, attendez la mise au point.",
+        same: "Vue déjà prise. " + hint,
+        added: "Vue ajoutée ✓ " + hint
+    };
+    setMessage(prefix, texts[res.state] || hint, res.state === "added" ? "ok" : "warning");
+}
+
+function drawCalibOverlay() {
+    clearOverlay();
+    const ctx = overlayCtx;
+    ctx.setTransform(overlayScale, 0, 0, overlayScale, 0, 0);
+
+    /* Couverture de l'image : centres des vues déjà prises. */
+    ctx.save();
+    for (const v of calibViews) {
+        ctx.beginPath();
+        ctx.arc(v.center[0], v.center[1], 10, 0, 2 * Math.PI);
+        ctx.fillStyle = v.tilt >= 15 ? "rgba(45, 212, 191, .75)" : "rgba(251, 146, 60, .75)";
+        ctx.fill();
+    }
+    if (calibLast && calibLast.pts) {
+        ctx.fillStyle = "rgba(45, 212, 191, .95)";
+        for (const p of calibLast.pts) {
+            ctx.beginPath();
+            ctx.arc(p.u, p.v, 3, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+    }
+    ctx.restore();
+}
 
 /* ============================================================
    CHARGEMENT APRILTAG WASM
@@ -1033,6 +1895,7 @@ async function startCamera() {
 
         startButton.classList.add("hidden");
         stopButton.classList.remove("hidden");
+        detectFocusSupport();
 
         setMessage("Recherche AprilTag…", "Présentez les deux cubes devant la caméra.", "warning");
 
@@ -1103,6 +1966,7 @@ function configureCanvas() {
     baseFocal = fx;
     cameraModel = { fx: fx * focalScale, fy: fy * focalScale, cx, cy, videoWidth: width, videoHeight: height };
     detector.setCameraInfo(cameraModel.fx, cameraModel.fy, cx, cy);
+    applyCalibrationToCamera();
 
     cubes = [];
 }
@@ -1394,8 +2258,7 @@ function poseToCamera(pose, P) {
 }
 
 function projectUV(c) {
-    if (c[2] <= 1e-4) return null;
-    return [cameraModel.fx * c[0] / c[2] + cameraModel.cx, cameraModel.fy * c[1] / c[2] + cameraModel.cy];
+    return projectWithModel(cameraModel, c);
 }
 
 /* Rotation d'un vecteur v autour de l'axe w (vecteur rotation, en radians). */
@@ -2344,7 +3207,7 @@ function updateScene(now) {
 
     /* Identification toujours active, même après validation (pour l'affichage). */
     assignScene(visible);
-    if (recorded || cameraMoving) return;
+    if (recorded || cameraMoving || frameBlurry) return;
 
     const assigned = visible.filter(c => c.scene).sort((p, q) => p.scene.number - q.scene.number);
     for (let i = 0; i < assigned.length; i++) {
@@ -3374,6 +4237,15 @@ async function scanFrame(timestamp) {
         }
         lastAnalysisEnd = now;
 
+        if (calibMode) {
+            const res = calibProcess(markers);
+            drawCalibOverlay();
+            calibStatusMessage(res);
+            updateCalibUI();
+            return;
+        }
+
+        updateBlur(markers.filter(m => templateByTagId.has(Number(m.id))));
         updateCubes(markers, now);
         updateScene(now);
         numberCubes();
@@ -3423,6 +4295,9 @@ function updateStatus(markers) {
     }
     else if (cameraMoving) {
         setMessage("iPad en mouvement rapide", "Images ignorées : balayez plus lentement.", "warning");
+    }
+    else if (frameBlurry) {
+        setMessage("Image floue", "Image ignorée : ralentissez ou laissez la mise au point se faire.", "warning");
     }
     else if (scene.length < EXPECTED_CUBES) {
         setMessage(
@@ -3541,17 +4416,22 @@ function updateStatus(markers) {
         "Analyse : " + analysis.width + " × " + analysis.height + " px • " + analysisRate.toFixed(1) + " images/s" +
         (cameraMoving ? " • <span class='warning'>iPad en mouvement rapide</span>" : "")
     );
+    if (lastBlur) {
+        lines.push("Netteté : flou " + lastBlur.sigma.toFixed(2) + " px" +
+            (lastBlur.ref ? " (meilleures images " + lastBlur.ref.toFixed(2) + " px)" : "") +
+            (frameBlurry ? " • <span class='warning'>image ignorée</span>" : ""));
+    }
     lines.push(
-        !FOCAL_AUTO
-            ? "<span class='warning'>Focale supposée, non calibrée : angle de vue " + currentHfovDeg().toFixed(1) +
-              "° sur le grand côté de l'image (focale " + (cameraModel ? cameraModel.fx.toFixed(0) : "—") +
-              " px). Une erreur de focale fausse surtout les écarts en profondeur.</span>"
-            : focalReady()
-            ? "<span class='ok'>Focale calibrée</span> : angle de vue " + currentHfovDeg().toFixed(1) +
-              "° (correction " + ((focalScale - 1) * 100).toFixed(1) + " %, " + focalSamples.length + " estimations)"
-            : "<span class='warning'>Calibration de la focale : " + focalSamples.length + " / " + FOCAL_MIN_SAMPLES +
-              "</span> — montrez des cubes dont on voit le dessus, le tag ID 2 et la face à points"
+        cameraModel && cameraModel.calibrated
+            ? "<span class='ok'>Caméra calibrée</span> : angle de vue " + currentHfovDeg().toFixed(2) + "°, focale " +
+              cameraModel.fx.toFixed(1) + " px, centre " + cameraModel.cx.toFixed(1) + " ; " + cameraModel.cy.toFixed(1) +
+              ", déformation k1 " + cameraModel.k1.toFixed(4)
+            : "<span class='warning'>Caméra non calibrée</span> : angle de vue supposé " + currentHfovDeg().toFixed(1) +
+              "° (focale " + (cameraModel ? cameraModel.fx.toFixed(0) : "—") + " px). Faites la calibration dans « Réglages de précision »."
     );
+    if (PRINT.tagMm !== PRINT_NOMINAL.tagMm || PRINT.dotSpanMm !== PRINT_NOMINAL.dotSpanMm) {
+        lines.push("Impression mesurée : tag " + PRINT.tagMm.toFixed(2) + " mm, points " + PRINT.dotSpanMm.toFixed(2) + " mm");
+    }
 
     diagnostic.innerHTML = lines.join("<br>");
 }
@@ -3872,6 +4752,31 @@ recordButton.addEventListener("click", toggleRecord);
 restartButton.addEventListener("click", restartMeasure);
 autoButton.addEventListener("click", toggleAuto);
 window.addEventListener("pagehide", stopCamera);
+document.getElementById("calibStart").addEventListener("click", toggleCalibMode);
+document.getElementById("calibCompute").addEventListener("click", computeCalibration);
+document.getElementById("calibSave").addEventListener("click", saveCalibration);
+document.getElementById("calibClear").addEventListener("click", clearCalibration);
+document.getElementById("focusLock").addEventListener("click", toggleFocusLock);
+const printTagInput = document.getElementById("printTag");
+const printDotsInput = document.getElementById("printDots");
+printTagInput.value = PRINT.tagMm.toFixed(2);
+printDotsInput.value = PRINT.dotSpanMm.toFixed(2);
+document.getElementById("printApply").addEventListener("click", () => {
+    const tagMm = parseFloat(String(printTagInput.value).replace(",", "."));
+    const dotSpanMm = parseFloat(String(printDotsInput.value).replace(",", "."));
+    if (!(tagMm > 6 && tagMm < 10) || !(dotSpanMm > 5 && dotSpanMm < 8.5)) {
+        alert("Valeurs hors limites : tag entre 6 et 10 mm, points entre 5 et 8,5 mm.");
+        return;
+    }
+    try { localStorage.setItem(PRINT_STORAGE_KEY, JSON.stringify({ tagMm, dotSpanMm })); }
+    catch (_) { alert("Enregistrement impossible dans ce navigateur."); return; }
+    location.reload();
+});
+document.getElementById("printReset").addEventListener("click", () => {
+    try { localStorage.removeItem(PRINT_STORAGE_KEY); } catch (_) {}
+    location.reload();
+});
+updateCalibUI();
 </script>
 
 </body>
