@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V10.9</title>
+<title>AprilTag iPad V11.0</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -410,7 +410,7 @@ body.mode-calib .scan-only, body:not(.mode-calib) .calib-only { display: none !i
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V10.9";
+const VERSION = "V11.0";
 
 /*
   MESURES D'IMPRESSION (V10.2)
@@ -1972,6 +1972,324 @@ function drawCalibOverlay() {
     ctx.restore();
 }
 
+
+/* ============================================================
+   AJUSTEMENT GLOBAL (V11)
+
+   Jusqu'ici, chaque image donnait une pose par cube, puis on faisait la
+   moyenne des positions relatives deux à deux. Une image où un cube est
+   vu de biais (peu de points, mesure moins sûre) pesait autant qu'une
+   image parfaite, et les erreurs pouvaient s'additionner d'un cube à l'autre.
+
+   L'ajustement global reprend directement les MESURES BRUTES de toutes les
+   images clés (coins des tags + centres des points, en pixels) et cherche
+   en une seule fois :
+   - la position et l'orientation de chaque cube (le cube 1 sert de repère) ;
+   - la position de l'iPad pour chaque image clé ;
+   telles que tous les points prévus tombent au mieux sur les points mesurés.
+
+   Chaque mesure compte selon sa précision réelle. Les mesures aberrantes
+   (reflet, mauvais point) sont atténuées automatiquement (pondération de
+   Huber). Résolution : Levenberg-Marquardt avec élimination des poses de
+   l'iPad (complément de Schur), il ne reste qu'un système de 18 inconnues.
+============================================================ */
+
+const BA_ENABLED = true;
+const BA_MAX_KEYFRAMES = 300;        // images clés gardées (échantillonnage uniforme dans le temps)
+const BA_MIN_KEYFRAMES = 12;
+const BA_HUBER_PX = 1.5;             // au-delà, une mesure est progressivement moins écoutée
+const BA_MAX_SHIFT_MM = 2.0;         // garde-fou : écart maximal accepté avec la méthode par paires
+
+let keyframes = [];
+let keyframesSeen = 0;
+let lastBA = null;
+
+function resetKeyframes() {
+    keyframes = [];
+    keyframesSeen = 0;
+    lastBA = null;
+}
+
+/* Un cube a été remesuré ou reconnu autrement : ses images clés ne sont plus fiables. */
+function dropKeyframesOf(sceneCube) {
+    keyframes = keyframes.filter(k => !k.items.some(it => it.s === sceneCube));
+}
+
+function addKeyframe(assigned) {
+    const items = assigned
+        .filter(c => c.fit && c.fit.obs && c.fit.obs.length >= 4 && c.rawFrame)
+        .map(c => ({
+            s: c.scene,
+            obs: c.fit.obs.map(o => ({ P: o.P, u: o.u, v: o.v, s: o.s || 1 })),
+            frame: { origin: [...c.rawFrame.origin], x: c.rawFrame.x, y: c.rawFrame.y, z: c.rawFrame.z }
+        }));
+    if (items.length < 2) return;
+    keyframesSeen++;
+    const kf = { items };
+    if (keyframes.length < BA_MAX_KEYFRAMES) {
+        keyframes.push(kf);
+    }
+    else {
+        const j = Math.floor(Math.random() * keyframesSeen);
+        if (j < BA_MAX_KEYFRAMES) keyframes[j] = kf;
+    }
+}
+
+function frameToPose(f) {
+    return { R: [f.x, f.y, f.z], t: f.origin };
+}
+
+/* Pose de l'iPad (monde -> caméra) à partir d'un cube vu dans l'image et de sa pose dans le monde. */
+function cameraFromItem(item, world) {
+    const w = world.R, cf = item.frame;
+    const cols = [0, 1, 2].map(i => frameDirToCamera(cf, [w[0][i], w[1][i], w[2][i]]));
+    const t = vecSub(cf.origin, vecAdd(vecAdd(vecScale(cols[0], world.t[0]), vecScale(cols[1], world.t[1])), vecScale(cols[2], world.t[2])));
+    return { R: cols, t };
+}
+
+function kfResiduals(kf, cam, worldOf, weights) {
+    let n = 0;
+    for (const it of kf.items) n += it.obs.length;
+    const r = new Float64Array(n * 2);
+    let i = 0, q = 0;
+    for (const it of kf.items) {
+        const W = worldOf(it.s);
+        for (const o of it.obs) {
+            const p = projectUV(poseToCamera(cam, poseToCamera(W, o.P)));
+            if (!p) return null;
+            const s = o.s * (weights ? weights[q] : 1);
+            r[i++] = (p[0] - o.u) * s;
+            r[i++] = (p[1] - o.v) * s;
+            q++;
+        }
+    }
+    return r;
+}
+
+function matMul(A, B) {
+    return A.map(row => B[0].map((_, j) => row.reduce((s, v, k) => s + v * B[k][j], 0)));
+}
+
+function invertSmall(M) {
+    const n = M.length;
+    const out = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let c = 0; c < n; c++) {
+        const e = new Array(n).fill(0);
+        e[c] = 1;
+        const col = solveLinear(M.map(row => [...row]), e);
+        if (!col) return null;
+        for (let r = 0; r < n; r++) out[r][c] = col[r];
+    }
+    return out;
+}
+
+function bundleAdjust(sol, kfsIn) {
+    const ref = sol.ref;
+    const movable = sol.members.filter(s => s !== ref && sol.poses.has(s));
+    const index = new Map(movable.map((s, k) => [s, k]));
+    const N = 6 * movable.length;
+    let world = new Map();
+    world.set(ref, { R: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], t: [0, 0, 0] });
+    for (const s of movable) world.set(s, frameToPose(sol.poses.get(s)));
+
+    let kfs = kfsIn.filter(k => k.items.every(it => world.has(it.s)));
+    if (kfs.length < BA_MIN_KEYFRAMES) return null;
+
+    /* Pose de départ de l'iPad pour chaque image clé : d'après le cube le mieux mesuré. */
+    let cams = kfs.map(k => {
+        const best = k.items.reduce((a, b) => (b.obs.length > a.obs.length ? b : a));
+        return cameraFromItem(best, world.get(best.s));
+    });
+    let weights = kfs.map(k => new Float64Array(k.items.reduce((n, it) => n + it.obs.length, 0)).fill(1));
+
+    const residualsAll = (w, c) => {
+        let cost = 0;
+        const rs = [];
+        for (let k = 0; k < kfs.length; k++) {
+            const r = kfResiduals(kfs[k], c[k], s => w.get(s), weights[k]);
+            if (!r) return null;
+            rs.push(r);
+            cost += sumSquares(r);
+        }
+        return { rs, cost };
+    };
+
+    const updateWeights = () => {
+        for (let k = 0; k < kfs.length; k++) {
+            const r = kfResiduals(kfs[k], cams[k], s => world.get(s), null);
+            if (!r) continue;
+            for (let q = 0; q < weights[k].length; q++) {
+                const px = Math.hypot(r[2 * q], r[2 * q + 1]) / flatObs(kfs[k])[q].s;   // écart en pixels
+                weights[k][q] = px <= BA_HUBER_PX ? 1 : Math.sqrt(BA_HUBER_PX / px);
+            }
+        }
+    };
+
+    let cur = residualsAll(world, cams);
+    if (!cur) return null;
+    let lambda = 1e-3;
+    const step = [1e-6, 1e-6, 1e-6, 1e-7, 1e-7, 1e-7];
+    let S = null;
+
+    for (let it = 0; it < 25; it++) {
+        if (it % 4 === 0) {
+            updateWeights();
+            cur = residualsAll(world, cams);
+            if (!cur) return null;
+        }
+        const U = Array.from({ length: N }, () => new Array(N).fill(0));
+        const gx = new Array(N).fill(0);
+        const blocks = [];
+        for (let k = 0; k < kfs.length; k++) {
+            const r0 = cur.rs[k];
+            const m = r0.length;
+            const Jc = step.map((h, a) => {
+                const d = [0, 0, 0, 0, 0, 0];
+                d[a] = h;
+                const r = kfResiduals(kfs[k], applyDelta(cams[k], d), s => world.get(s), weights[k]);
+                return Float64Array.from(r, (v, i) => (v - r0[i]) / h);
+            });
+            const Jx = [];       // [{ col, values }]
+            for (const itm of kfs[k].items) {
+                if (!index.has(itm.s)) continue;
+                const base = 6 * index.get(itm.s);
+                step.forEach((h, a) => {
+                    const d = [0, 0, 0, 0, 0, 0];
+                    d[a] = h;
+                    const moved = applyDelta(world.get(itm.s), d);
+                    const r = kfResiduals(kfs[k], cams[k], s => (s === itm.s ? moved : world.get(s)), weights[k]);
+                    Jx.push({ col: base + a, values: Float64Array.from(r, (v, i) => (v - r0[i]) / h) });
+                });
+            }
+            const dot = (p, q) => { let s = 0; for (let i = 0; i < m; i++) s += p[i] * q[i]; return s; };
+            const V = Jc.map(p => Jc.map(q => dot(p, q)));
+            const gc = Jc.map(p => -dot(p, r0));
+            const W = Jx.map(p => ({ col: p.col, row: Jc.map(q => dot(p.values, q)) }));
+            for (const p of Jx) {
+                gx[p.col] -= dot(p.values, r0);
+                for (const q of Jx) U[p.col][q.col] += dot(p.values, q.values);
+            }
+            blocks.push({ V, gc, W });
+        }
+
+        let improved = false;
+        for (let attempt = 0; attempt < 6 && !improved; attempt++) {
+            /* Complément de Schur : on élimine les poses de l'iPad, il reste les cubes. */
+            const Sm = U.map((row, i) => row.map((v, j) => (i === j ? v * (1 + lambda) + 1e-12 : v)));
+            const rhs = [...gx];
+            const Vinv = [];
+            for (const b of blocks) {
+                const Vd = b.V.map((row, i) => row.map((v, j) => (i === j ? v * (1 + lambda) + 1e-12 : v)));
+                const Vi = invertSmall(Vd);
+                Vinv.push(Vi);
+                if (!Vi) continue;
+                const WV = b.W.map(w => Vi[0].map((_, j) => w.row.reduce((s, v, a) => s + v * Vi[a][j], 0)));
+                for (let p = 0; p < b.W.length; p++) {
+                    for (let q = 0; q < b.W.length; q++) {
+                        Sm[b.W[p].col][b.W[q].col] -= WV[p].reduce((s, v, a) => s + v * b.W[q].row[a], 0);
+                    }
+                    rhs[b.W[p].col] -= WV[p].reduce((s, v, a) => s + v * b.gc[a], 0);
+                }
+            }
+            const dx = N ? solveLinear(Sm, rhs) : [];
+            if (!dx) { lambda *= 10; continue; }
+            const w2 = new Map(world);
+            for (const s of movable) {
+                const b = 6 * index.get(s);
+                w2.set(s, applyDelta(world.get(s), dx.slice(b, b + 6)));
+            }
+            const c2 = cams.map((c, k) => {
+                const b = blocks[k], Vi = Vinv[k];
+                if (!Vi) return c;
+                const rhsC = b.gc.map((g, a) => g - b.W.reduce((s, w) => s + w.row[a] * dx[w.col], 0));
+                const dc = Vi.map(row => row.reduce((s, v, a) => s + v * rhsC[a], 0));
+                return applyDelta(c, dc);
+            });
+            const next = residualsAll(w2, c2);
+            if (next && next.cost < cur.cost) {
+                world = w2;
+                cams = c2;
+                cur = next;
+                lambda = Math.max(lambda / 4, 1e-9);
+                improved = true;
+                S = Sm;
+            }
+            else {
+                lambda *= 10;
+            }
+        }
+        if (!improved) break;
+    }
+
+    /* Qualité : écart moyen en pixels (sans pondération) et incertitude de chaque cube. */
+    let sum = 0, count = 0;
+    for (let k = 0; k < kfs.length; k++) {
+        const r = kfResiduals(kfs[k], cams[k], s => world.get(s), null);
+        const flat = flatObs(kfs[k]);
+        for (let q = 0; q < flat.length; q++) {
+            sum += (r[2 * q] ** 2 + r[2 * q + 1] ** 2) / (flat[q].s * flat[q].s);
+            count++;
+        }
+    }
+    const rms = Math.sqrt(sum / Math.max(1, count));
+    let sigmaMm = new Map();
+    if (S && N) {
+        const dof = Math.max(1, 2 * count - N - 6 * kfs.length);
+        const s2 = cur.cost / dof;
+        const Sinv = invertSmall(S.map(row => [...row]));
+        if (Sinv) {
+            for (const s of movable) {
+                const b = 6 * index.get(s);
+                const v = (Sinv[b + 3][b + 3] + Sinv[b + 4][b + 4] + Sinv[b + 5][b + 5]) * s2;
+                sigmaMm.set(s, Math.sqrt(Math.max(0, v)) * 1000);
+            }
+        }
+    }
+    const means = new Map();
+    for (const s of movable) {
+        const p = world.get(s);
+        means.set(s, { x: p.R[0], y: p.R[1], z: p.R[2], t: p.t });
+    }
+    return { means, rms, keyframes: kfs.length, points: count, sigmaMm };
+}
+
+function flatObs(kf) {
+    if (!kf._flat) kf._flat = kf.items.flatMap(it => it.obs);
+    return kf._flat;
+}
+
+/*
+  Calcul global au moment de figer la position. Le résultat remplace la
+  moyenne par paires, sauf s'il s'en écarte de plus de 2 mm (signe d'un
+  problème : on garde alors la méthode par paires, plus prudente).
+*/
+function refineWithBundle(sol) {
+    if (!BA_ENABLED) return null;
+    let ba = null;
+    const t0 = performance.now();
+    try {
+        ba = bundleAdjust(sol, keyframes);
+    }
+    catch (error) {
+        console.error("Ajustement global :", error);
+    }
+    if (!ba) {
+        lastBA = { used: false, reason: "pas assez d'images clés (" + keyframes.length + ")" };
+        return null;
+    }
+    let shiftMm = 0, shiftDeg = 0;
+    for (const [s, m] of ba.means) {
+        const old = sol.means.get(s);
+        if (!old) continue;
+        shiftMm = Math.max(shiftMm, vecLength(vecSub(m.t, old.t)) * 1000);
+        shiftDeg = Math.max(shiftDeg, rotationAngleDeg(m, old));
+    }
+    const ok = shiftMm <= BA_MAX_SHIFT_MM && ba.rms < FIT_MAX_RMS_PX;
+    lastBA = { used: ok, ms: performance.now() - t0, rms: ba.rms, keyframes: ba.keyframes, points: ba.points, shiftMm, shiftDeg, sigmaMm: ba.sigmaMm,
+        reason: ok ? "" : "écart trop grand avec la méthode par paires (" + shiftMm.toFixed(2) + " mm)" };
+    return ok ? ba : null;
+}
+
 /* ============================================================
    CHARGEMENT APRILTAG WASM
 ============================================================ */
@@ -3183,6 +3501,7 @@ function identityPose() {
 }
 
 function resetScene() {
+    resetKeyframes();
     scene = [];
     pairs = new Map();
     sceneCache = null;
@@ -3228,6 +3547,8 @@ function addPairSample(a, b, rel) {
         const away = vecLength(vecSub(rel.t, med)) * 1000 > MEASURE_MOVE_MM;
         pair.moveCount = away ? pair.moveCount + 1 : 0;
         if (pair.moveCount >= MEASURE_MOVE_FRAMES) {
+            dropKeyframesOf(a);
+            dropKeyframesOf(b);
             pair.samples = pair.samples.slice(-(MEASURE_MOVE_FRAMES - 1));
             pair.moveCount = 0;
             autoArmed = true;
@@ -3420,6 +3741,7 @@ function assignScene(visible) {
                 */
                 u.scene = best;
                 visibleScene.add(best);
+                dropKeyframesOf(best);
                 for (const pair of pairs.values()) {
                     if (pair.a === best || pair.b === best) {
                         pair.samples = [];
@@ -3489,6 +3811,7 @@ function updateScene(now) {
             addPairSample(assigned[i].scene, assigned[j].scene, relativePose(assigned[i].rawFrame, assigned[j].rawFrame));
         }
     }
+    addKeyframe(assigned);
 }
 
 /* Petite carte des cubes et de leurs liaisons, en haut à droite de l'image. */
@@ -4288,10 +4611,12 @@ function resetStability() {
 }
 
 function lockPosition(stats, auto) {
+    const ba = refineWithBundle(stats);
     recorded = {
         ref: stats.ref,
         members: stats.members,
-        rels: stats.means,
+        rels: ba ? ba.means : stats.means,
+        method: ba ? "global" : "paires",
         spreadMm: stats.spreadMm,
         spreadDeg: stats.spreadDeg,
         samples: stats.samples,
@@ -4717,6 +5042,16 @@ function updateStatus(markers) {
         "Analyse : " + analysis.width + " × " + analysis.height + " px • " + analysisRate.toFixed(1) + " images/s" +
         (cameraMoving ? " • <span class='warning'>iPad en mouvement rapide</span>" : "")
     );
+    if (recorded && lastBA) {
+        lines.push(lastBA.used
+            ? "<span class='ok'>Ajustement global</span> : " + lastBA.keyframes + " images clés, " + lastBA.points + " points, écart " +
+              lastBA.rms.toFixed(2) + " px • correction par rapport aux paires " + lastBA.shiftMm.toFixed(3) + " mm / " + lastBA.shiftDeg.toFixed(3) + "°" +
+              (lastBA.sigmaMm && lastBA.sigmaMm.size ? " • incertitude " + [...lastBA.sigmaMm].map(([s, v]) => "C" + s.number + " " + (v * 1000).toFixed(0) + " µm").join(", ") : "")
+            : "<span class='warning'>Ajustement global non utilisé</span> : " + escapeHtml(lastBA.reason || ""));
+    }
+    else if (!recorded) {
+        lines.push("Images clés pour l'ajustement global : " + keyframes.length);
+    }
     if (lastBlur) {
         lines.push("Netteté : flou " + lastBlur.sigma.toFixed(2) + " px" +
             (lastBlur.ref ? " (meilleures images " + lastBlur.ref.toFixed(2) + " px)" : "") +
