@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V10.3</title>
+<title>AprilTag iPad V10.5</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -216,6 +216,7 @@ body.mode-calib .scan-only, body:not(.mode-calib) .calib-only { display: none !i
 .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .bar span { display: block; height: 100%; width: 0; background: rgb(251, 146, 60); transition: width .3s; }
 .bar span.full { background: rgb(45, 212, 191); }
+.calib-live { margin-top: 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .calib-steps { margin: 6px 0 4px; padding-left: 26px; font-size: 13px; line-height: 1.55; color: #c8c8cf; }
 .calib-steps li { margin-bottom: 5px; }
 .calib-steps a { color: var(--a); }
@@ -320,19 +321,21 @@ body.mode-calib .scan-only, body:not(.mode-calib) .calib-only { display: none !i
 
     <section class="library calib-panel calib-only">
         <div class="calib-progress">
-            <div class="bar-label"><span>Vues</span><span id="calibViewsTxt">0 / 20</span></div>
+            <div class="bar-label"><span>Vues</span><span id="calibViewsTxt">0 / 15</span></div>
             <div class="bar"><span id="calibViewsBar"></span></div>
-            <div class="bar-label"><span>Vues inclinées</span><span id="calibTiltTxt">0 / 8</span></div>
+            <div class="bar-label"><span>Vues inclinées</span><span id="calibTiltTxt">0 / 6</span></div>
             <div class="bar"><span id="calibTiltBar"></span></div>
+            <div id="calibLive" class="calib-live"></div>
         </div>
         <ol class="calib-steps">
             <li>Planche de calibration imprimée à 100 % et collée bien à plat (<a href="planche_calibration_A4.pdf" target="_blank">télécharger la planche</a>).</li>
             <li>iPad tenu comme pour la mesure, à 20-30 cm : toute la planche dans l'image.</li>
             <li>Immobile une seconde → <b>bip</b>, la vue est prise. Inclinez ensuite la planche (haut, bas, gauche, droite) et placez-la dans chaque case de la grille.</li>
-            <li>La calibration se valide toute seule (flash), puis l'acquisition SCANTAG démarre.</li>
+            <li>La calibration se valide toute seule (flash), puis l'acquisition SCANTAG démarre. Dès 8 vues, « Valider maintenant » force le calcul.</li>
         </ol>
         <div class="buttons">
-            <button id="calibRestart">Recommencer la calibration</button>
+            <button id="calibNow" disabled>Valider maintenant</button>
+            <button id="calibRestart">Recommencer</button>
             <button id="calibSkip">Passer sans calibration</button>
         </div>
     </section>
@@ -402,7 +405,7 @@ body.mode-calib .scan-only, body:not(.mode-calib) .calib-only { display: none !i
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V10.3";
+const VERSION = "V10.5";
 
 /*
   MESURES D'IMPRESSION (V10.2)
@@ -955,11 +958,14 @@ const CALIB_BOARD = { firstId: 100, cols: 6, rows: 8, tagM: 0.022, pitchM: 0.030
 const CALIB_STORAGE_KEY = "apriltag-ipad-calibration-v1";
 const CALIB_MIN_TAGS = 10;            // tags de la planche visibles pour garder une vue
 const CALIB_MIN_VIEWS = 12;           // vues minimum pour calculer
-const CALIB_TARGET_VIEWS = 20;        // calcul automatique à partir de 20 vues
-const CALIB_MIN_TILTED = 8;           // vues inclinées (≥ 15°) nécessaires : sans elles la focale est mal définie
-const CALIB_STILL_PX = 1.5;           // déplacement maximal des coins entre deux images (iPad immobile)
-const CALIB_MAX_RMS_PX = 0.8;         // qualité exigée de la calibration
-const CALIB_MAX_FSTD_RATIO = 0.002;   // focale connue à 0,2 % près au moins
+const CALIB_TARGET_VIEWS = 15;        // calcul automatique à partir de 15 vues
+const CALIB_MIN_TILTED = 6;           // vues inclinées (≥ 15°) nécessaires : sans elles la focale est mal définie
+const CALIB_STILL_PX = 4;             // déplacement maximal des coins entre deux analyses (iPad tenu à la main)
+const CALIB_MAX_BLUR_PX = 2.2;        // flou maximal d'une vue de calibration
+const CALIB_MAX_RMS_PX = 1.2;         // validation directe : écart résiduel
+const CALIB_MAX_FSTD_RATIO = 0.004;   // validation directe : focale connue à 0,4 % près
+const CALIB_ACCEPT_RMS_PX = 2.5;      // après 2 essais, le meilleur résultat est accepté s'il reste sous cet écart
+const CALIB_MANUAL_MIN_VIEWS = 8;     // « Valider maintenant » possible dès 8 vues
 const CALIB_SWITCH_MS = 2200;         // délai entre la validation et le passage en acquisition
 
 let calibMode = false;
@@ -971,6 +977,8 @@ let calibActive = null;               // calibration en vigueur
 let calibNote = "";
 let calibAccepted = null;             // calibration validée, en attente du passage en acquisition
 let calibRetries = 0;
+let calibBest = null;                 // meilleur résultat obtenu (repli si la validation directe échoue)
+let calibLastMotion = null, calibLastBlur = null, calibLastState = "";
 let appMode = "idle";                 // "calib" : calibration ; "scan" : acquisition SCANTAG
 
 function calibBoardPoint(id) {
@@ -1363,13 +1371,15 @@ function calibProcess(markers) {
             const q = prev.get(p.id + ":" + p.X + ":" + p.Y);
             if (q) { s += Math.hypot(p.u - q.u, p.v - q.v); n++; }
         }
+        calibLastMotion = n ? s / n : null;
         still = n >= 4 * CALIB_MIN_TAGS && s / n < CALIB_STILL_PX;
     }
     calibPrev = obs.pts;
     if (!still) return { state: "move", tags: obs.tags };
 
     const sharp = frameBlur(markers.filter(m => calibBoardPoint(Number(m.id))));
-    if (sharp && sharp.sigma > 1.5) return { state: "blur", tags: obs.tags };
+    calibLastBlur = sharp ? sharp.sigma : null;
+    if (sharp && sharp.sigma > CALIB_MAX_BLUR_PX) return { state: "blur", tags: obs.tags };
 
     const geo = boardNormalAndCenter(obs.H);
     const diag = Math.hypot(analysis.width, analysis.height);
@@ -1391,7 +1401,7 @@ function calibTiltedCount() {
     return calibViews.filter(v => v.tilt >= 15).length;
 }
 
-function computeCalibration() {
+function computeCalibration(manual) {
     let res = null;
     try {
         res = runCalibration(calibViews, analysis.width, analysis.height);
@@ -1405,6 +1415,18 @@ function computeCalibration() {
         acceptCalibration(res);
         return;
     }
+    if (res && (!calibBest || res.rms < calibBest.rms)) calibBest = res;
+    /* Repli : bouton « Valider maintenant », ou 2 essais déjà faits -> meilleur résultat s'il reste correct. */
+    if ((manual || calibRetries >= 2) && calibBest && calibBest.rms <= CALIB_ACCEPT_RMS_PX) {
+        acceptCalibration(calibBest);
+        return;
+    }
+    if (manual) {
+        calibNote = "<span class='warning'>Pas assez de vues exploitables" + (res ? " (écart " + fmt(res.rms, 2) + " px)" : "") +
+            " : continuez à prendre des vues.</span>";
+        updateCalibUI();
+        return;
+    }
 
     /* Validation refusée : on retire les vues les moins bonnes et on continue la prise de vues. */
     calibRetries++;
@@ -1413,16 +1435,14 @@ function computeCalibration() {
         const med = median(res.viewRms);
         const limit = Math.max(CALIB_MAX_RMS_PX, 1.5 * med);
         let keep = calibViews.filter((v, k) => res.viewRms[k] <= limit);
-        if (keep.length === calibViews.length) {
-            const order = res.viewRms.map((e, k) => [e, k]).sort((p, q) => q[0] - p[0]);
-            const worst = new Set(order.slice(0, Math.ceil(calibViews.length / 4)).map(o => o[1]));
-            keep = calibViews.filter((v, k) => !worst.has(k));
-        }
+        const order = res.viewRms.map((e, k) => [e, k]).sort((p, q) => q[0] - p[0]);
+        const worst = new Set(order.slice(0, keep.length === calibViews.length ? 2 : 3).map(o => o[1]));
+        keep = calibViews.filter((v, k) => !worst.has(k));
         dropped = calibViews.length - keep.length;
         calibViews = keep;
     }
     else {
-        dropped = Math.ceil(calibViews.length / 4);
+        dropped = 2;
         calibViews = calibViews.slice(dropped);
     }
     calibNote = "<span class='warning'>Calibration pas encore assez précise" +
@@ -1462,6 +1482,7 @@ function enterCalibrationMode(reason) {
     calibPending = null;
     calibAccepted = null;
     calibRetries = 0;
+    calibBest = null;
     document.body.classList.add("mode-calib");
     setMessage("Étape 1 : calibration", reason || "Présentez la planche de calibration en entier, iPad immobile.", "warning");
     updateCalibUI();
@@ -1771,6 +1792,19 @@ function updateCalibUI() {
         b.classList.toggle("full", n >= total);
         t.textContent = Math.min(n, total) + " / " + total;
     };
+    const live = document.getElementById("calibLive");
+    if (live) {
+        const names = { board: "planche incomplète", move: "iPad en mouvement", blur: "image floue", same: "vue déjà prise", added: "vue prise", done: "validée" };
+        live.innerHTML = calibMode
+            ? "Dernière image : " + (names[calibLastState] || "—") +
+              " • mouvement " + (calibLastMotion !== null ? calibLastMotion.toFixed(1) + " px (max " + CALIB_STILL_PX + ")" : "—") +
+              " • flou " + (calibLastBlur !== null ? calibLastBlur.toFixed(2) + " px (max " + CALIB_MAX_BLUR_PX + ")" : "—") +
+              (calibBest ? " • meilleur écart " + calibBest.rms.toFixed(2) + " px" : "") +
+              (calibNote ? "<br>" + calibNote : "")
+            : "";
+    }
+    const now = document.getElementById("calibNow");
+    if (now) now.disabled = !calibMode || !!calibAccepted || calibViews.length < CALIB_MANUAL_MIN_VIEWS;
     setBar("calibViewsBar", "calibViewsTxt", calibAccepted ? CALIB_TARGET_VIEWS : calibViews.length, CALIB_TARGET_VIEWS);
     setBar("calibTiltBar", "calibTiltTxt", calibAccepted ? CALIB_MIN_TILTED : calibTiltedCount(), CALIB_MIN_TILTED);
 
@@ -1800,6 +1834,7 @@ function clearCalibration() {
 }
 
 function calibStatusMessage(res) {
+    calibLastState = res.state;
     if (calibAccepted) return;
     const n = calibViews.length;
     const tilted = calibTiltedCount();
@@ -4338,6 +4373,32 @@ function restartMeasure() {
     if (!stream) setMessage("Mesure effacée", "Démarrez la caméra pour une nouvelle mesure.");
 }
 
+/*
+  Bouton « Recommencer » : nouvelle acquisition complète.
+  Tout est remis à zéro (liaisons, suivi des cubes, netteté) et la
+  validation automatique est réarmée et remise sur « oui ».
+*/
+function restartAcquisition() {
+    recorded = null;
+    autoEnabled = true;
+    autoArmed = true;
+    signalReady = false;
+    resetMeasure();
+    resetStability();
+    cubes = [];
+    lastRefView = null;
+    blurHistory = [];
+    frameBlurry = false;
+    sceneCache = null;
+    updateButtonsAndGrid();
+    if (stream) {
+        setMessage("Nouvelle acquisition SCANTAG", "Validation automatique réarmée : balayez lentement les cubes.", "warning");
+    }
+    else {
+        setMessage("Mesure effacée", "Démarrez la caméra pour une nouvelle mesure.");
+    }
+}
+
 function updateButtonsAndGrid() {
     const sol = solveScene();
     const set = recorded || (sol.means.size ? sol : null);
@@ -4919,11 +4980,12 @@ for (const item of library) loadLibraryItem(item);
 renderStlList();
 stopButton.addEventListener("click", stopCamera);
 recordButton.addEventListener("click", toggleRecord);
-restartButton.addEventListener("click", restartMeasure);
+restartButton.addEventListener("click", restartAcquisition);
 autoButton.addEventListener("click", toggleAuto);
 window.addEventListener("pagehide", stopCamera);
 document.getElementById("calibStart").addEventListener("click", toggleCalibMode);
 document.getElementById("calibRestart").addEventListener("click", () => enterCalibrationMode());
+document.getElementById("calibNow").addEventListener("click", () => computeCalibration(true));
 document.getElementById("calibSkip").addEventListener("click", enterScanMode);
 document.getElementById("calibClear").addEventListener("click", clearCalibration);
 document.getElementById("focusLock").addEventListener("click", toggleFocusLock);
