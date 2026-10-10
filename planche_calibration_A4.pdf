@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V10.5</title>
+<title>AprilTag iPad V10.6</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -405,7 +405,7 @@ body.mode-calib .scan-only, body:not(.mode-calib) .calib-only { display: none !i
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V10.5";
+const VERSION = "V10.6";
 
 /*
   MESURES D'IMPRESSION (V10.2)
@@ -964,7 +964,8 @@ const CALIB_STILL_PX = 4;             // déplacement maximal des coins entre de
 const CALIB_MAX_BLUR_PX = 2.2;        // flou maximal d'une vue de calibration
 const CALIB_MAX_RMS_PX = 1.2;         // validation directe : écart résiduel
 const CALIB_MAX_FSTD_RATIO = 0.004;   // validation directe : focale connue à 0,4 % près
-const CALIB_ACCEPT_RMS_PX = 2.5;      // après 2 essais, le meilleur résultat est accepté s'il reste sous cet écart
+const CALIB_ACCEPT_RMS_PX = 4.0;      // repli : écart maximal accepté (planche imparfaitement plane)
+const CALIB_ACCEPT_FSTD_RATIO = 0.01; // repli : focale connue à 1 % près au moins
 const CALIB_MANUAL_MIN_VIEWS = 8;     // « Valider maintenant » possible dès 8 vues
 const CALIB_SWITCH_MS = 2200;         // délai entre la validation et le passage en acquisition
 
@@ -978,7 +979,8 @@ let calibNote = "";
 let calibAccepted = null;             // calibration validée, en attente du passage en acquisition
 let calibRetries = 0;
 let calibBest = null;                 // meilleur résultat obtenu (repli si la validation directe échoue)
-let calibLastMotion = null, calibLastBlur = null, calibLastState = "";
+let calibLastMotion = null, calibLastBlur = null, calibLastState = "", calibLastTilt = null;
+let calibLastResult = null;           // dernier calcul (affiché pour comprendre un refus)
 let appMode = "idle";                 // "calib" : calibration ; "scan" : acquisition SCANTAG
 
 function calibBoardPoint(id) {
@@ -1389,11 +1391,13 @@ function calibProcess(markers) {
         const shift = Math.hypot(geo.center[0] - v.center[0], geo.center[1] - v.center[1]) / diag;
         novelty = Math.min(novelty, angle / 8 + shift / 0.12);
     }
+    calibLastTilt = geo.tilt;
     if (novelty < 1) return { state: "same", tags: obs.tags, tilt: geo.tilt };
 
     calibViews.push({ pts: obs.pts, H: obs.H, normal: geo.normal, center: geo.center, tilt: geo.tilt });
     beep(1320, 0.06);
-    if (calibViews.length >= CALIB_TARGET_VIEWS && calibTiltedCount() >= CALIB_MIN_TILTED && !calibAccepted) computeCalibration();
+    calibLastTilt = geo.tilt;
+    if (calibViews.length >= CALIB_TARGET_VIEWS && !calibAccepted) computeCalibration();
     return { state: "added", tags: obs.tags, tilt: geo.tilt };
 }
 
@@ -1409,21 +1413,28 @@ function computeCalibration(manual) {
     catch (error) {
         console.error(error);
     }
-    const good = res && res.rms <= CALIB_MAX_RMS_PX && res.views >= CALIB_MIN_VIEWS &&
-        (!res.fStd || res.fStd / res.fx <= CALIB_MAX_FSTD_RATIO);
+    calibLastResult = res;
+    const fRatio = res && res.fStd ? res.fStd / res.fx : (res ? 0 : Infinity);
+    const sane = res && res.hfovDeg > 45 && res.hfovDeg < 90;
+    const good = sane && res.rms <= CALIB_MAX_RMS_PX && fRatio <= CALIB_MAX_FSTD_RATIO;
+    const acceptable = sane && res.rms <= CALIB_ACCEPT_RMS_PX && fRatio <= CALIB_ACCEPT_FSTD_RATIO;
     if (good) {
         acceptCalibration(res);
         return;
     }
-    if (res && (!calibBest || res.rms < calibBest.rms)) calibBest = res;
-    /* Repli : bouton « Valider maintenant », ou 2 essais déjà faits -> meilleur résultat s'il reste correct. */
-    if ((manual || calibRetries >= 2) && calibBest && calibBest.rms <= CALIB_ACCEPT_RMS_PX) {
+    if (acceptable && (!calibBest || res.rms < calibBest.rms)) calibBest = res;
+    /* Repli : bouton « Valider maintenant », ou un essai déjà refusé -> meilleur résultat acceptable. */
+    if ((manual || calibRetries >= 1) && calibBest) {
         acceptCalibration(calibBest);
+        if (calibBest.rms > CALIB_MAX_RMS_PX) {
+            calibNote = "<span class='warning'>Calibration acceptée avec un écart de " + fmt(calibBest.rms, 2) +
+                " px : recollez la planche bien à plat pour faire mieux.</span>";
+        }
         return;
     }
     if (manual) {
-        calibNote = "<span class='warning'>Pas assez de vues exploitables" + (res ? " (écart " + fmt(res.rms, 2) + " px)" : "") +
-            " : continuez à prendre des vues.</span>";
+        calibNote = "<span class='warning'>Pas encore exploitable" + (res ? " (écart " + fmt(res.rms, 2) + " px, focale ± " +
+            fmt(100 * fRatio, 2) + " %)" : "") + " : prenez des vues plus inclinées.</span>";
         updateCalibUI();
         return;
     }
@@ -1483,6 +1494,8 @@ function enterCalibrationMode(reason) {
     calibAccepted = null;
     calibRetries = 0;
     calibBest = null;
+    calibLastResult = null;
+    calibLastTilt = null;
     document.body.classList.add("mode-calib");
     setMessage("Étape 1 : calibration", reason || "Présentez la planche de calibration en entier, iPad immobile.", "warning");
     updateCalibUI();
@@ -1799,7 +1812,10 @@ function updateCalibUI() {
             ? "Dernière image : " + (names[calibLastState] || "—") +
               " • mouvement " + (calibLastMotion !== null ? calibLastMotion.toFixed(1) + " px (max " + CALIB_STILL_PX + ")" : "—") +
               " • flou " + (calibLastBlur !== null ? calibLastBlur.toFixed(2) + " px (max " + CALIB_MAX_BLUR_PX + ")" : "—") +
-              (calibBest ? " • meilleur écart " + calibBest.rms.toFixed(2) + " px" : "") +
+              " • inclinaison " + (calibLastTilt !== null ? calibLastTilt.toFixed(0) + "° (≥ 15 pour compter)" : "—") +
+              (calibLastResult ? "<br>Dernier calcul : écart " + calibLastResult.rms.toFixed(2) + " px, focale ± " +
+                  (calibLastResult.fStd ? (100 * calibLastResult.fStd / calibLastResult.fx).toFixed(2) : "—") + " %, angle de vue " +
+                  calibLastResult.hfovDeg.toFixed(1) + "°" : "") +
               (calibNote ? "<br>" + calibNote : "")
             : "";
     }

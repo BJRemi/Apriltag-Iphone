@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V10.6</title>
+<title>AprilTag iPad V10.7</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -338,6 +338,9 @@ body.mode-calib .scan-only, body:not(.mode-calib) .calib-only { display: none !i
             <button id="calibRestart">Recommencer</button>
             <button id="calibSkip">Passer sans calibration</button>
         </div>
+        <div class="buttons">
+            <button id="calibData">Données calibration (pour analyse)</button>
+        </div>
     </section>
 
     <div class="buttons scan-only">
@@ -405,7 +408,7 @@ body.mode-calib .scan-only, body:not(.mode-calib) .calib-only { display: none !i
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V10.6";
+const VERSION = "V10.7";
 
 /*
   MESURES D'IMPRESSION (V10.2)
@@ -980,7 +983,8 @@ let calibAccepted = null;             // calibration validée, en attente du pas
 let calibRetries = 0;
 let calibBest = null;                 // meilleur résultat obtenu (repli si la validation directe échoue)
 let calibLastMotion = null, calibLastBlur = null, calibLastState = "", calibLastTilt = null;
-let calibLastResult = null;           // dernier calcul (affiché pour comprendre un refus)
+let calibLastResult = null;
+let calibLastError = "";           // dernier calcul (affiché pour comprendre un refus)
 let appMode = "idle";                 // "calib" : calibration ; "scan" : acquisition SCANTAG
 
 function calibBoardPoint(id) {
@@ -1405,62 +1409,75 @@ function calibTiltedCount() {
     return calibViews.filter(v => v.tilt >= 15).length;
 }
 
+/*
+  Calcul de la calibration (V10.7) : les vues ne sont JAMAIS retirées.
+  Chaque nouvelle vue au-delà de 15 relance le calcul ; le meilleur résultat
+  correct est gardé. Validation :
+  - directe si écart ≤ 1,2 px et focale connue à 0,4 % près ;
+  - sinon au calcul suivant, avec le meilleur résultat acceptable
+    (écart ≤ 4 px, focale à 1 % près) ;
+  - « Valider maintenant » : meilleur résultat jusqu'à 6 px / 2 %, avec avertissement.
+*/
 function computeCalibration(manual) {
     let res = null;
+    calibLastError = "";
     try {
         res = runCalibration(calibViews, analysis.width, analysis.height);
     }
     catch (error) {
         console.error(error);
+        calibLastError = errorText(error);
     }
     calibLastResult = res;
-    const fRatio = res && res.fStd ? res.fStd / res.fx : (res ? 0 : Infinity);
-    const sane = res && res.hfovDeg > 45 && res.hfovDeg < 90;
-    const good = sane && res.rms <= CALIB_MAX_RMS_PX && fRatio <= CALIB_MAX_FSTD_RATIO;
-    const acceptable = sane && res.rms <= CALIB_ACCEPT_RMS_PX && fRatio <= CALIB_ACCEPT_FSTD_RATIO;
-    if (good) {
+    const fRatio = res ? (res.fStd ? res.fStd / res.fx : 0) : Infinity;
+    const sane = !!res && Number.isFinite(res.rms) && res.hfovDeg > 35 && res.hfovDeg < 100;
+    const quality = (rmsMax, fMax) => sane && res.rms <= rmsMax && fRatio <= fMax;
+
+    if (quality(CALIB_MAX_RMS_PX, CALIB_MAX_FSTD_RATIO)) {
         acceptCalibration(res);
         return;
     }
-    if (acceptable && (!calibBest || res.rms < calibBest.rms)) calibBest = res;
-    /* Repli : bouton « Valider maintenant », ou un essai déjà refusé -> meilleur résultat acceptable. */
-    if ((manual || calibRetries >= 1) && calibBest) {
-        acceptCalibration(calibBest);
-        if (calibBest.rms > CALIB_MAX_RMS_PX) {
-            calibNote = "<span class='warning'>Calibration acceptée avec un écart de " + fmt(calibBest.rms, 2) +
-                " px : recollez la planche bien à plat pour faire mieux.</span>";
+    const usable = quality(manual ? 6 : CALIB_ACCEPT_RMS_PX, manual ? 0.02 : CALIB_ACCEPT_FSTD_RATIO);
+    if (usable && (!calibBest || res.rms < calibBest.rms)) calibBest = res;
+    if (calibBest && (manual || calibRetries >= 1) &&
+        (manual || (calibBest.rms <= CALIB_ACCEPT_RMS_PX))) {
+        const best = calibBest;
+        acceptCalibration(best);
+        if (best.rms > CALIB_MAX_RMS_PX) {
+            calibNote = "<span class='warning'>Calibration acceptée avec un écart de " + fmt(best.rms, 2) +
+                " px : recollez la planche bien à plat et refaites-la pour gagner en précision.</span>";
+            updateCalibUI();
         }
         return;
     }
-    if (manual) {
-        calibNote = "<span class='warning'>Pas encore exploitable" + (res ? " (écart " + fmt(res.rms, 2) + " px, focale ± " +
-            fmt(100 * fRatio, 2) + " %)" : "") + " : prenez des vues plus inclinées.</span>";
-        updateCalibUI();
-        return;
-    }
-
-    /* Validation refusée : on retire les vues les moins bonnes et on continue la prise de vues. */
     calibRetries++;
-    let dropped = 0;
-    if (res && res.viewRms && res.viewRms.length === calibViews.length) {
-        const med = median(res.viewRms);
-        const limit = Math.max(CALIB_MAX_RMS_PX, 1.5 * med);
-        let keep = calibViews.filter((v, k) => res.viewRms[k] <= limit);
-        const order = res.viewRms.map((e, k) => [e, k]).sort((p, q) => q[0] - p[0]);
-        const worst = new Set(order.slice(0, keep.length === calibViews.length ? 2 : 3).map(o => o[1]));
-        keep = calibViews.filter((v, k) => !worst.has(k));
-        dropped = calibViews.length - keep.length;
-        calibViews = keep;
+    calibNote = "<span class='warning'>" + (res
+        ? "Pas encore assez précis (écart " + fmt(res.rms, 2) + " px, focale ± " + fmt(100 * fRatio, 2) + " %, angle " + fmt(res.hfovDeg, 1) + "°)"
+        : "Calcul impossible" + (calibLastError ? " : " + escapeHtml(calibLastError) : "")) +
+        " — continuez : chaque nouvelle vue relance le calcul.</span>" +
+        (calibRetries >= 4 ? " <span class='warning'>Si rien ne change : planche bien plane ? « Données calibration » puis envoyez-moi le fichier.</span>" : "");
+    updateCalibUI();
+}
+
+function exportCalibrationData() {
+    const data = {
+        version: VERSION,
+        width: analysis.width,
+        height: analysis.height,
+        board: CALIB_BOARD,
+        lastResult: calibLastResult,
+        lastError: calibLastError,
+        views: calibViews.map(v => ({ tilt: v.tilt, pts: v.pts.map(p => [p.id, p.X, p.Y, +p.u.toFixed(3), +p.v.toFixed(3)]) }))
+    };
+    const text = JSON.stringify(data);
+    const name = "calibration_donnees_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-") + ".json";
+    const file = typeof File === "function" ? new File([text], name, { type: "application/json" }) : null;
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], title: name }).catch(() => downloadBuffer(new TextEncoder().encode(text), name));
     }
     else {
-        dropped = 2;
-        calibViews = calibViews.slice(dropped);
+        downloadBuffer(new TextEncoder().encode(text), name);
     }
-    calibNote = "<span class='warning'>Calibration pas encore assez précise" +
-        (res ? " (écart " + fmt(res.rms, 2) + " px)" : "") + " : " + dropped +
-        " vues moins bonnes retirées, continuez.</span>" +
-        (calibRetries >= 3 ? " <span class='warning'>Vérifiez que la planche est bien plane et l'image nette.</span>" : "");
-    updateCalibUI();
 }
 
 function acceptCalibration(res) {
@@ -1803,7 +1820,7 @@ function updateCalibUI() {
         if (!b || !t) return;
         b.style.width = Math.min(100, 100 * n / total) + "%";
         b.classList.toggle("full", n >= total);
-        t.textContent = Math.min(n, total) + " / " + total;
+        t.textContent = n + " / " + total;
     };
     const live = document.getElementById("calibLive");
     if (live) {
@@ -5002,6 +5019,7 @@ window.addEventListener("pagehide", stopCamera);
 document.getElementById("calibStart").addEventListener("click", toggleCalibMode);
 document.getElementById("calibRestart").addEventListener("click", () => enterCalibrationMode());
 document.getElementById("calibNow").addEventListener("click", () => computeCalibration(true));
+document.getElementById("calibData").addEventListener("click", exportCalibrationData);
 document.getElementById("calibSkip").addEventListener("click", enterScanMode);
 document.getElementById("calibClear").addEventListener("click", clearCalibration);
 document.getElementById("focusLock").addEventListener("click", toggleFocusLock);
