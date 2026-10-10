@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V10.0</title>
+<title>AprilTag iPad V10.1</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -166,6 +166,33 @@ button:disabled { opacity: .32; }
     padding: 0 12px;
 }
 
+.library {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+}
+
+.library-title { font-size: 12px; color: var(--muted); margin: 0 4px 10px; }
+.stl-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+
+.stl-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 54px;
+    padding: 0 16px;
+    text-align: left;
+}
+
+.stl-item .name { font-weight: 650; }
+.stl-item .meta { font-size: 12px; color: var(--muted); font-weight: 500; }
+.stl-item:not(:disabled) { background: var(--text); color: var(--bg); }
+.stl-item:not(:disabled) .meta { color: #52525b; }
+.stl-item.ready:not(:disabled) { background: rgb(45, 212, 191); animation: pulse 1.2s ease-in-out 3; }
+
 .grid-caption { margin: 14px 4px 0; font-size: 12px; color: var(--muted); }
 
 #flash {
@@ -261,21 +288,19 @@ button:disabled { opacity: .32; }
     </div>
 
     <div class="buttons">
-        <label class="file-button">
-            <span id="stlLabel">Choisir le STL…</span>
-            <input id="stlInput" type="file" accept=".stl,model/stl,application/octet-stream" hidden>
-        </label>
-    </div>
-
-    <div class="buttons">
         <button id="record" class="record" disabled>Enregistrer la position</button>
         <button id="auto" class="auto on">Validation auto : oui</button>
         <button id="restart" class="restart">Recommencer</button>
     </div>
 
-    <div class="buttons">
-        <button id="exportAll" class="export main" disabled>Exporter le STL des 4 positions</button>
-    </div>
+    <section class="library">
+        <div class="library-title">STL à exporter sur les origines des cubes</div>
+        <div id="stlList" class="stl-list"></div>
+        <label class="file-button">
+            <span>Ajouter un STL à la liste…</span>
+            <input id="stlInput" type="file" accept=".stl,model/stl,application/octet-stream" hidden>
+        </label>
+    </section>
 
     <div id="gridCaption" class="grid-caption"></div>
     <div class="pose-grid">
@@ -305,7 +330,7 @@ button:disabled { opacity: .32; }
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V10.0";
+const VERSION = "V10.1";
 
 const TAG_SIZE_M = 0.008;             // côté du carré noir du tag (sans la marge blanche)
 const CAMERA_HFOV_DEG = 65;
@@ -398,6 +423,18 @@ const FOCAL_MAX_SAMPLES = 60;
 const FOCAL_RESET_CHANGE = 0.01;     // variation de focale (1 %) qui remet les liaisons à zéro
 const DOT_WEIGHT = 9;                // un centre de point est ~3 fois plus précis qu'un coin de tag
 
+/*
+  BIBLIOTHÈQUE DE STL
+  Une fois la position des cubes validée, l'utilisateur choisit dans cette liste
+  le STL à placer sur l'origine de chaque cube (même STL pour les 4 cubes).
+  offsetM : origine du STL dans le repère du cube (axes du STL = axes du cube).
+  Les fichiers sont placés à côté de index.html dans le dépôt.
+*/
+const STL_LIBRARY = [
+    { name: "IOC-A", file: "IOC-A.stl", offsetM: [0, 0, -0.010] },
+    { name: "DESS intraoral", file: "DESS_intraoral.stl", offsetM: [0, 0, -0.010] }
+];
+
 const CUBE_TEMPLATES = [
     {
         faces: { xPlus: 2, zPlus: 7 },       // +X vers ID 2 (droite), +Z vers ID 7 (dessus)
@@ -426,7 +463,7 @@ const UNCONFIRMED_FORGET_MS = 400;   // fausse détection passagère oubliée vi
   À l'export, la position retenue est la moyenne robuste de ces mesures
   (valeurs aberrantes écartées).
 */
-const MEASURE_BUFFER = 64;           // nombre de mesures gardées
+const MEASURE_BUFFER = 96;           // nombre de mesures gardées
 const MEASURE_MIN_SAMPLES = 16;      // minimum pour exporter
 const MEASURE_MOVE_MM = 3.0;         // écart à la médiane au-delà duquel une mesure est « hors place »
 const MEASURE_MOVE_FRAMES = 3;       // 3 mesures hors place de suite = un cube a vraiment bougé
@@ -443,7 +480,7 @@ const CAMERA_MAX_TURN_DEG_S = 15;    // vitesse de rotation maximale de la vue (
 
 /* Mode balayage */
 const PAIR_MIN_SAMPLES = 6;          // mesures minimum pour qu'une liaison compte dans le calcul
-const AUTO_MIN_PAIR_SAMPLES = 20;    // mesures minimum par liaison pour la validation automatique
+const AUTO_MIN_PAIR_SAMPLES = 30;    // mesures minimum par liaison pour la validation automatique
 const AUTO_MIN_LINKS = 3;           // liaisons par cube pour valider (3 = relié aux 3 autres)
 const ELIMINATION_RATIO = 4;        // rattachement par élimination : jusqu'à 4 arêtes de la place prévue
 const MATCH_RADIUS_RATIO = 0.5;      // reconnaissance d'un cube : à moins d'une demi-arête de sa place
@@ -452,7 +489,7 @@ const AUTO_MAX_RESIDUAL_DEG = 0.5;   // cohérence des boucles exigée (orientat
 
 /* Validation automatique : dès que la position moyenne est connue assez finement. */
 const AUTO_MIN_SAMPLES = 24;         // mesures minimum
-const AUTO_MAX_ERROR_MM = 0.25;      // incertitude maximale de la moyenne (position)
+const AUTO_MAX_ERROR_MM = 0.15;      // incertitude maximale de la moyenne (position)
 const AUTO_MAX_ERROR_DEG = 0.3;      // incertitude maximale de la moyenne (orientation)
 /*
   Couleurs d'état (rendu objectif de la situation) :
@@ -483,11 +520,11 @@ const startButton = document.getElementById("start");
 const stopButton = document.getElementById("stop");
 const recordButton = document.getElementById("record");
 const autoButton = document.getElementById("auto");
-const exportAllButton = document.getElementById("exportAll");
+const stlList = document.getElementById("stlList");
 const gridCaption = document.getElementById("gridCaption");
 const restartButton = document.getElementById("restart");
 const stlInput = document.getElementById("stlInput");
-const stlLabel = document.getElementById("stlLabel");
+
 
 const statusEl = document.getElementById("status");
 const detailEl = document.getElementById("detail");
@@ -977,7 +1014,6 @@ async function startCamera() {
         await loadAprilTag();
 
         /* Les STL se chargent en parallèle : la caméra n'en dépend pas. */
-        for (const template of templates) loadTemplateSTL(template);
 
         setMessage("Ouverture caméra…", "Activation de la caméra arrière.", "warning");
 
@@ -2607,24 +2643,38 @@ function loadMesh(name) {
     return promise;
 }
 
-async function loadTemplateSTL(template) {
-    if (template.mesh) return;
-    template.stlState = "chargement…";
+/* Bibliothèque : chargement des STL au démarrage de la page. */
+const library = STL_LIBRARY.map(item => ({ ...item, mesh: null, state: "chargement…" }));
+
+async function loadLibraryItem(item) {
     try {
-        template.mesh = await loadMesh(template.stlName);
-        template.stlState =
-            template.mesh.count + " triangles" +
-            (template.mesh.view.count < template.mesh.count
-                ? " (" + template.mesh.view.count + " affichés)"
-                : "");
+        item.mesh = await loadMesh(item.file);
+        item.state = item.mesh.count + " triangles";
     }
     catch (error) {
-        console.error("Chargement STL :", error);
-        template.mesh = null;
-        template.stlState = "ERREUR — " + errorText(error);
+        item.mesh = null;
+        item.state = "fichier « " + item.file + " » introuvable";
     }
-    updateButtonsAndGrid();
+    renderStlList();
 }
+
+function renderStlList() {
+    stlList.innerHTML = "";
+    for (const item of library) {
+        const button = document.createElement("button");
+        button.className = "stl-item" + (recorded && signalReady ? " ready" : "");
+        button.disabled = !item.mesh || !(recorded || solveScene().complete);
+        button.innerHTML =
+            "<span class='name'>" + escapeHtml(item.name) + "</span>" +
+            "<span class='meta'>" + escapeHtml(item.mesh
+                ? (recorded || solveScene().complete ? "Exporter les " + EXPECTED_CUBES + " positions" : "en attente de la validation")
+                : item.state) + "</span>";
+        button.addEventListener("click", () => exportWith(item));
+        stlList.appendChild(button);
+    }
+}
+
+let signalReady = false;
 
 
 /* ============================================================
@@ -2862,21 +2912,48 @@ function downloadBuffer(buffer, fileName) {
 }
 
 /*
-  EXPORT : UN SEUL STL JOINT
+  EXPORT : UN SEUL STL JOINT, AVEC LE STL CHOISI DANS LA BIBLIOTHÈQUE
 
-  Les STL des cubes enregistrés sont réunis dans un seul fichier, chacun à
-  sa position enregistrée, dans le système de coordonnées du STL du cube 1.
+  Repère du fichier exporté (réduit l'effet de l'erreur d'orientation d'un seul cube) :
+  - origine : origine du STL du cube 1 ;
+  - Z : moyenne des axes Z des 4 cubes ;
+  - X : direction du cube 1 vers le cube 2, rendue perpendiculaire à Z ;
+  - Y : complète le repère.
+  Seules les positions des cubes entre eux comptent : le repère global est
+  de toute façon recalé sur le modèle dans le logiciel de CAO.
 */
-function jointExportFile() {
+function exportFrame() {
     const ref = recorded.ref;
-    const parts = recorded.members.map(cube => [
-        cube.template.mesh,
-        cube === ref ? null : makeToRefTransform(recorded.rels.get(cube), cube.stlOffsetM, ref.stlOffsetM)
-    ]);
-    const base = ref.template.stlName.replace(/\.stl$/i, "");
+    const poses = recorded.members.map(cube =>
+        cube === ref ? { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1], t: [0, 0, 0] } : recorded.rels.get(cube)
+    );
+    const z = vecNormalize(poses.reduce((sum, p) => vecAdd(sum, p.z), [0, 0, 0]));
+    let x = orthoNormalize(poses[1] ? poses[1].t : [1, 0, 0], z) || orthoNormalize([1, 0, 0], z) || [1, 0, 0];
+    return { x, y: vecCross(z, x), z };
+}
+
+function jointExportFile(item) {
+    const ref = recorded.ref;
+    const E = exportFrame();
+    const offset = vecScale(item.offsetM, 1000);               // origine du STL dans le repère du cube (mm)
+    const origin = offset;                                     // origine du fichier : origine du STL du cube 1
+
+    const parts = recorded.members.map(cube => {
+        const rel = cube === ref ? null : recorded.rels.get(cube);
+        return [item.mesh, function(vertex) {
+            const q = vecAdd(offset, vertex);                  // repère du cube (mm)
+            const p = rel
+                ? vecAdd(vecScale(rel.t, 1000), vecAdd(vecAdd(vecScale(rel.x, q[0]), vecScale(rel.y, q[1])), vecScale(rel.z, q[2])))
+                : q;                                           // repère du cube 1 (mm)
+            const d = vecSub(p, origin);
+            return [vecDot(E.x, d), vecDot(E.y, d), vecDot(E.z, d)];
+        }];
+    });
+
+    const base = item.name.replace(/[^\w-]+/g, "_");
     return {
         name: base + "_" + recorded.members.length + "_positions.stl",
-        data: new Uint8Array(buildBinarySTL(parts, "AprilTag " + VERSION + " " + recorded.members.length + " positions"))
+        data: new Uint8Array(buildBinarySTL(parts, "AprilTag " + VERSION + " " + item.name + " " + recorded.members.length + " positions"))
     };
 }
 
@@ -2959,8 +3036,8 @@ function makeZip(files) {
     return buffer;
 }
 
-/* Une seule touche : fige la position la plus précise disponible, puis exporte le STL joint. */
-function exportAll() {
+/* Une seule touche : fige la position la plus précise disponible, puis exporte le STL choisi. */
+function exportWith(item) {
     if (!recorded) {
         const sol = solveScene();
         if (!sol.complete) {
@@ -2974,13 +3051,14 @@ function exportAll() {
         lockPosition(sol, false);
     }
 
-    if (recorded.members.some(cube => !cube.template.mesh)) {
-        setMessage("Export impossible", "Le STL n'est pas chargé.", "warning");
+    if (!item.mesh) {
+        setMessage("Export impossible", "Le STL « " + item.name + " » n'est pas chargé.", "warning");
         return;
     }
-    exportAllButton.classList.remove("ready");
+    signalReady = false;
+    renderStlList();
 
-    const files = [jointExportFile()];
+    const files = [jointExportFile(item)];
     const names = files[0].name;
 
     /* iPad / iPhone : feuille de partage avec un fichier par cube. */
@@ -3168,7 +3246,8 @@ function signalValidation() {
     void flash.offsetWidth;                 // relance l'animation
     flash.classList.add("on");
 
-    exportAllButton.classList.add("ready");
+    signalReady = true;
+    renderStlList();
 
     try {
         if (audioCtx) {
@@ -3228,7 +3307,7 @@ function restartMeasure() {
     recorded = null;
     autoArmed = true;
     resetScene();
-    exportAllButton.classList.remove("ready");
+    signalReady = false;
     updateButtonsAndGrid();
     if (!stream) setMessage("Mesure effacée", "Démarrez la caméra pour une nouvelle mesure.");
 }
@@ -3263,11 +3342,7 @@ function updateButtonsAndGrid() {
     autoButton.textContent = "Validation auto : " + (autoEnabled ? "oui" : "non");
     autoButton.className = autoEnabled ? "auto on" : "auto";
 
-    const ready = recorded || sol.complete;
-    exportAllButton.disabled = !templates[0].mesh || !ready;
-    exportAllButton.textContent = ready
-        ? "Exporter le STL des " + EXPECTED_CUBES + " positions"
-        : "Cubes reliés : " + scene.filter(s => sol.poses.has(s)).length + " / " + EXPECTED_CUBES;
+    renderStlList();
 }
 
 
@@ -3394,8 +3469,7 @@ function updateStatus(markers) {
         const f = template.faces;
         lines.push(
             "Cubes " + [f.xPlus, f.yPlus, f.zPlus].filter(id => id !== undefined).join(" / ") +
-            (template.dots ? " + points" : "") +
-            " • STL : " + escapeHtml(template.stlName) + " — " + escapeHtml(template.stlState)
+            (template.dots ? " + points" : "")
         );
     }
 
@@ -3412,6 +3486,8 @@ function updateStatus(markers) {
         }
         lines.push(line);
     }
+
+    lines.push("Bibliothèque : " + library.map(item => escapeHtml(item.name) + " (" + escapeHtml(item.state) + ")").join(" • "));
 
     const unassigned = cubes.filter(c => c.confirmed && c.frame && !c.scene).length;
     if (unassigned) lines.push("<span class='warning'>" + unassigned + " cube(s) visible(s) pas encore identifié(s)</span>");
@@ -3536,20 +3612,45 @@ function drawScene(markers) {
 
     for (const marker of markers) drawMarker(marker);
 
+    /* Plus de STL dans l'image : seulement l'origine où chaque STL sera placé à l'export. */
+    const originOffset = library.length ? library[0].offsetM : [0, 0, -0.010];
+    const drawOrigin = (frame, color) => {
+        const c = project3D(frame.origin);
+        const o = project3D(framePointToCamera(frame, originOffset));
+        if (!c || !o) return;
+        overlayCtx.save();
+        overlayCtx.setLineDash([3, 3]);
+        overlayCtx.lineWidth = 1.5;
+        overlayCtx.strokeStyle = "rgba(" + color.join(",") + ", .9)";
+        overlayCtx.beginPath();
+        overlayCtx.moveTo(c.x, c.y);
+        overlayCtx.lineTo(o.x, o.y);
+        overlayCtx.stroke();
+        overlayCtx.setLineDash([]);
+        overlayCtx.beginPath();
+        overlayCtx.arc(o.x, o.y, 5, 0, Math.PI * 2);
+        overlayCtx.fillStyle = "rgba(" + color.join(",") + ", 1)";
+        overlayCtx.fill();
+        overlayCtx.lineWidth = 1.5;
+        overlayCtx.strokeStyle = "#ffffff";
+        overlayCtx.stroke();
+        overlayCtx.restore();
+    };
+
     if (recorded) {
-        /* STL figés : placés à partir de n'importe quel cube enregistré visible. */
+        /* Origines figées : placées à partir de n'importe quel cube enregistré visible. */
         const anchor = cubes.find(c => c.confirmed && c.frame && c.scene && recorded.members.includes(c.scene));
         if (anchor) {
             const relAnchor = anchor.scene === recorded.ref ? null : recorded.rels.get(anchor.scene);
             const refFrame = relAnchor ? frameFromRelative(anchor.frame, invRel(relAnchor)) : anchor.frame;
             for (const s of recorded.members) {
-                drawSTL(s, s === recorded.ref ? refFrame : frameFromRelative(refFrame, recorded.rels.get(s)));
+                drawOrigin(s === recorded.ref ? refFrame : frameFromRelative(refFrame, recorded.rels.get(s)), STATE_OK);
             }
         }
     }
     else {
         for (const cube of cubes) {
-            if (cube.confirmed && cube.scene && cube.frame) drawSTL(cube, cube.frame);
+            if (cube.confirmed && cube.scene && cube.frame) drawOrigin(cube.frame, cube.color);
         }
     }
 
@@ -3747,33 +3848,29 @@ stlInput.addEventListener("change", async function() {
     if (!file) return;
     try {
         const mesh = parseAnySTL(await file.arrayBuffer());
-        for (const template of templates) {
-            template.mesh = mesh;
-            template.stlName = file.name;
-            template.stlState =
-                mesh.count + " triangles" +
-                (mesh.view.count < mesh.count ? " (" + mesh.view.count + " affichés)" : "");
-        }
-        stlLabel.textContent = "STL : " + file.name;
-        if (recorded) {
-            recorded = null;
-            resetStability();
-        }
-        setMessage("STL chargé ✓", file.name + " — " + mesh.count + " triangles", "ok");
+        library.push({
+            name: file.name.replace(/\.stl$/i, ""),
+            file: file.name,
+            offsetM: [0, 0, -0.010],
+            mesh,
+            state: mesh.count + " triangles"
+        });
+        setMessage("STL ajouté ✓", file.name + " — " + mesh.count + " triangles", "ok");
     }
     catch (error) {
         setMessage("STL illisible", errorText(error), "error");
     }
     stlInput.value = "";
-    updateButtonsAndGrid();
+    renderStlList();
 });
 
 startButton.addEventListener("click", startCamera);
+for (const item of library) loadLibraryItem(item);
+renderStlList();
 stopButton.addEventListener("click", stopCamera);
 recordButton.addEventListener("click", toggleRecord);
 restartButton.addEventListener("click", restartMeasure);
 autoButton.addEventListener("click", toggleAuto);
-exportAllButton.addEventListener("click", exportAll);
 window.addEventListener("pagehide", stopCamera);
 </script>
 
