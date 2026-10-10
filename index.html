@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V9.1</title>
+<title>AprilTag iPad V9.2</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -168,6 +168,33 @@ button:disabled { opacity: .32; }
 
 .grid-caption { margin: 14px 4px 0; font-size: 12px; color: var(--muted); }
 
+#flash {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .95), rgba(134, 239, 172, .75));
+}
+
+#flash.on { animation: flash 0.9s ease-out; }
+
+@keyframes flash {
+    0%   { opacity: 0; }
+    12%  { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+.export.main.ready:not(:disabled) {
+    background: var(--good);
+    animation: pulse 1.2s ease-in-out 3;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.03); }
+}
+
 .hidden { display: none; }
 
 .pose-grid {
@@ -221,6 +248,7 @@ button:disabled { opacity: .32; }
     <div id="viewer" class="viewer">
         <video id="camera" autoplay muted playsinline></video>
         <canvas id="overlay"></canvas>
+        <div id="flash"></div>
         <div class="hud">
             <div id="status" class="status">Prêt</div>
             <div id="detail" class="detail">Touchez « Démarrer caméra ».</div>
@@ -276,7 +304,7 @@ button:disabled { opacity: .32; }
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V9.1";
+const VERSION = "V9.2";
 
 const TAG_SIZE_M = 0.008;             // côté du carré noir du tag (sans la marge blanche)
 const CAMERA_HFOV_DEG = 65;
@@ -389,6 +417,21 @@ const MEASURE_BUFFER = 64;           // nombre de mesures gardées
 const MEASURE_MIN_SAMPLES = 16;      // minimum pour exporter
 const MEASURE_MOVE_MM = 3.0;         // écart à la médiane au-delà duquel une mesure est « hors place »
 const MEASURE_MOVE_FRAMES = 3;       // 3 mesures hors place de suite = un cube a vraiment bougé
+
+/*
+  iPad TENU À LA MAIN
+  Les positions des cubes les uns par rapport aux autres sont calculées dans
+  la même image : un déplacement de l'iPad ne les change pas. Seuls les
+  mouvements rapides dégradent l'image (flou de bougé) : ces images-là sont
+  écartées de la mesure.
+*/
+const CAMERA_MAX_SHIFT_MM = 4;       // déplacement latéral maximal de la vue entre deux images
+const CAMERA_MAX_TURN_DEG = 2;       // rotation maximale de la vue entre deux images
+
+/* Validation automatique : dès que la position moyenne est connue assez finement. */
+const AUTO_MIN_SAMPLES = 24;         // mesures minimum
+const AUTO_MAX_ERROR_MM = 0.25;      // incertitude maximale de la moyenne (position)
+const AUTO_MAX_ERROR_DEG = 0.3;      // incertitude maximale de la moyenne (orientation)
 const CUBE_COLORS = [
     [125, 211, 252], [253, 186, 116], [134, 239, 172],
     [249, 168, 212], [196, 181, 253], [253, 224, 71]
@@ -462,6 +505,9 @@ let liveSet = null;
 let measureBuffer = [];
 let measureKey = "";
 let measureMoveCount = 0;
+let lastRefView = null;       // pose du cube 1 dans l'image précédente (détection des mouvements de l'iPad)
+let cameraMoving = false;
+let audioCtx = null;
 let nextCubeId = 1;
 
 /* Validation automatique */
@@ -872,6 +918,13 @@ async function loadAprilTag() {
 
 async function startCamera() {
     startButton.disabled = true;
+
+    /* Safari n'autorise le son qu'après une touche de l'utilisateur. */
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+    }
+    catch (_) {}
 
     try {
         if (!window.isSecureContext) {
@@ -1806,7 +1859,19 @@ function updateMeasureBuffer() {
     if (key !== measureKey) {
         measureBuffer = [];
         measureKey = key;
+        lastRefView = null;
     }
+
+    /* Mouvement rapide de l'iPad entre deux images : image probablement floue, ignorée. */
+    const refNow = tracked[0].rawFrame;
+    cameraMoving = false;
+    if (lastRefView) {
+        const shift = Math.hypot(refNow.origin[0] - lastRefView.origin[0], refNow.origin[1] - lastRefView.origin[1]) * 1000;
+        const turn = rotationAngleDeg(refNow, lastRefView);
+        cameraMoving = shift > CAMERA_MAX_SHIFT_MM || turn > CAMERA_MAX_TURN_DEG;
+    }
+    lastRefView = { origin: [...refNow.origin], x: refNow.x, y: refNow.y, z: refNow.z };
+    if (cameraMoving) return;
 
     const ref = tracked[0];
     const rels = new Map();
@@ -1828,6 +1893,7 @@ function updateMeasureBuffer() {
         if (measureMoveCount >= MEASURE_MOVE_FRAMES) {
             measureBuffer = measureBuffer.slice(-(MEASURE_MOVE_FRAMES - 1));
             measureMoveCount = 0;
+            autoArmed = true;            // nouvelle disposition : la validation auto peut repartir
         }
     }
 
@@ -2492,6 +2558,7 @@ function exportAll() {
         setMessage("Export impossible", "Le STL n'est pas chargé.", "warning");
         return;
     }
+    exportAllButton.classList.remove("ready");
 
     const files = cubeExportFiles();
     const names = files.map(f => f.name).join(", ");
@@ -2575,6 +2642,8 @@ function resetMeasure() {
     measureBuffer = [];
     measureKey = "";
     measureMoveCount = 0;
+    lastRefView = null;
+    cameraMoving = false;
 }
 
 function resetStability() {
@@ -2660,22 +2729,64 @@ function updateStability() {
         return;
     }
 
-    if (!autoEnabled || !autoArmed) return;
-    if (stats.members.length !== EXPECTED_CUBES || measureBuffer.length < MEASURE_MIN_SAMPLES) return;
+    /* La validation automatique se fait désormais sur la mesure précise : voir checkAutoValidation. */
+}
 
-    /* Stable : on attend encore un peu pour retenir la meilleure fenêtre. */
-    stableCount++;
-    if (!bestWindow || stats.score < bestWindow.score) {
-        bestWindow = stats;
-        sinceBest = 0;
-    }
-    else {
-        sinceBest++;
-    }
+/*
+  Validation automatique : la moyenne robuste des mesures brutes est connue
+  assez finement. Ces mesures ne dépendent pas de la position de l'iPad,
+  qui peut donc être tenu à la main.
+*/
+function checkAutoValidation() {
+    if (recorded || !autoEnabled || !autoArmed) return;
+    const precise = preciseEstimate();
+    if (!precise || precise.members.length !== EXPECTED_CUBES) return;
+    if (precise.samples < AUTO_MIN_SAMPLES) return;
+    if (precise.errorMm > AUTO_MAX_ERROR_MM || precise.errorDeg > AUTO_MAX_ERROR_DEG) return;
 
-    if (sinceBest >= AUTO_PATIENCE || stableCount >= AUTO_MAX_WAIT) {
-        lockPosition(bestWindow, true);
+    lockPosition(precise, true);
+    signalValidation();
+}
+
+/* Signal de validation : éclair à l'écran, bip court, et lampe de l'iPad si Safari le permet. */
+function signalValidation() {
+    const flash = document.getElementById("flash");
+    flash.classList.remove("on");
+    void flash.offsetWidth;                 // relance l'animation
+    flash.classList.add("on");
+
+    exportAllButton.classList.add("ready");
+
+    try {
+        if (audioCtx) {
+            const t = audioCtx.currentTime;
+            for (const [freq, start] of [[880, 0], [1320, 0.12]]) {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.0001, t + start);
+                gain.gain.exponentialRampToValueAtTime(0.25, t + start + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, t + start + 0.16);
+                osc.connect(gain).connect(audioCtx.destination);
+                osc.start(t + start);
+                osc.stop(t + start + 0.18);
+            }
+        }
     }
+    catch (_) {}
+
+    try {
+        const track = stream && stream.getVideoTracks()[0];
+        const caps = track && track.getCapabilities ? track.getCapabilities() : null;
+        if (caps && caps.torch) {
+            track.applyConstraints({ advanced: [{ torch: true }] })
+                .then(() => setTimeout(() => track.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {}), 300))
+                .catch(() => {});
+        }
+    }
+    catch (_) {}
+
+    if (navigator.vibrate) navigator.vibrate(120);
 }
 
 function toggleAuto() {
@@ -2698,6 +2809,7 @@ function toggleRecord() {
         autoArmed = false;       // pas de nouvelle validation tant que rien n'a bougé
         resetStability();
         resetMeasure();
+        exportAllButton.classList.remove("ready");
         if (!stream) setMessage("Position libérée", "Démarrez la caméra pour un nouvel enregistrement.");
     }
     else if (stability) {
@@ -2783,6 +2895,7 @@ async function scanFrame(timestamp) {
         liveSet = computeLiveSet();
         updateMeasureBuffer();
         updateStability();
+        checkAutoValidation();
 
         drawScene(markers);
         updateButtonsAndGrid();
@@ -2835,9 +2948,9 @@ function updateStatus(markers) {
                 ? "Touchez « Enregistrer la position » quand le placement est bon."
                 : !autoArmed
                     ? "Validation auto en pause : déplacez un cube pour la relancer."
-                    : bestWindow
-                        ? "Position stable, validation en cours…"
-                        : "Gardez les cubes immobiles pour la validation automatique.",
+                    : cameraMoving
+                        ? "iPad en mouvement rapide : images ignorées, ralentissez."
+                        : "Mesure en cours : cubes immobiles, l'iPad peut rester à la main.",
             "ok"
         );
     }
@@ -2917,7 +3030,9 @@ function updateStatus(markers) {
         lines.push(
             precise
                 ? "Mesure précise : " + precise.samples + " mesures • incertitude ≈ " +
-                  precise.errorMm.toFixed(3) + " mm / " + precise.errorDeg.toFixed(3) + "°"
+                  precise.errorMm.toFixed(3) + " mm / " + precise.errorDeg.toFixed(3) + "°" +
+                  " (validation auto sous " + AUTO_MAX_ERROR_MM + " mm / " + AUTO_MAX_ERROR_DEG + "°, " +
+                  AUTO_MIN_SAMPLES + " mesures min.)"
                 : "Mesure précise : " + measureBuffer.length + " / " + MEASURE_MIN_SAMPLES +
                   " (les " + EXPECTED_CUBES + " cubes immobiles et visibles)"
         );
