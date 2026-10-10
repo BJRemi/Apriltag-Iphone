@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V9.8</title>
+<title>AprilTag iPad V9.9</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -305,7 +305,7 @@ button:disabled { opacity: .32; }
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V9.8";
+const VERSION = "V9.9";
 
 const TAG_SIZE_M = 0.008;             // côté du carré noir du tag (sans la marge blanche)
 const CAMERA_HFOV_DEG = 65;
@@ -445,6 +445,7 @@ const CAMERA_MAX_TURN_DEG_S = 15;    // vitesse de rotation maximale de la vue (
 const PAIR_MIN_SAMPLES = 6;          // mesures minimum pour qu'une liaison compte dans le calcul
 const AUTO_MIN_PAIR_SAMPLES = 20;    // mesures minimum par liaison pour la validation automatique
 const AUTO_MIN_LINKS = 3;           // liaisons par cube pour valider (3 = relié aux 3 autres)
+const ELIMINATION_RATIO = 4;        // rattachement par élimination : jusqu'à 4 arêtes de la place prévue
 const MATCH_RADIUS_RATIO = 0.5;      // reconnaissance d'un cube : à moins d'une demi-arête de sa place
 const AUTO_MAX_RESIDUAL_MM = 0.3;    // cohérence des boucles exigée (position)
 const AUTO_MAX_RESIDUAL_DEG = 0.5;   // cohérence des boucles exigée (orientation)
@@ -2098,7 +2099,9 @@ function solveScene() {
         changed = false;
         for (const pair of pairs.values()) {
             if (!pair.samples.length) continue;
-            const rel = pair.samples[pair.samples.length - 1];
+            const rel = pair.samples.length >= 3
+                ? (pairStats(pair) || {}).mean || pair.samples[pair.samples.length - 1]
+                : pair.samples[pair.samples.length - 1];
             if (provisional.has(pair.a) && !provisional.has(pair.b)) {
                 provisional.set(pair.b, frameFromRelative(provisional.get(pair.a), rel));
                 changed = true;
@@ -2230,6 +2233,22 @@ function assignScene(visible) {
             if (best && bestDistance <= matchRadius) {
                 u.scene = best;
                 visibleScene.add(best);
+            }
+            else if (scene.length >= EXPECTED_CUBES && best && bestDistance <= template.edgeM * ELIMINATION_RATIO) {
+                /*
+                  Scène complète : ce cube est forcément l'un de ceux qui ne sont pas visibles.
+                  On le rattache au plus proche, et si la carte le plaçait mal, ses liaisons
+                  sont remesurées à partir de maintenant.
+                */
+                u.scene = best;
+                visibleScene.add(best);
+                for (const pair of pairs.values()) {
+                    if (pair.a === best || pair.b === best) {
+                        pair.samples = [];
+                        pair.stats = null;
+                    }
+                }
+                sceneCache = null;
             }
             else if (scene.length < EXPECTED_CUBES && (!best || bestDistance > template.edgeM * 1.5)) {
                 const s = makeSceneCube(template);
