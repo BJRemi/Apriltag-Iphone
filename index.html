@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V10.8</title>
+<title>AprilTag iPad V10.9</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -332,7 +332,7 @@ body.mode-calib .scan-only, body:not(.mode-calib) .calib-only { display: none !i
         <ol class="calib-steps">
             <li>Planche de calibration imprimée à 100 % et collée bien à plat (<a href="planche_calibration_A4.pdf" target="_blank">télécharger la planche</a>).</li>
             <li>iPad tenu comme pour la mesure, à 20-30 cm : toute la planche dans l'image.</li>
-            <li>Immobile une seconde → <b>bip</b>, la vue est prise. Inclinez ensuite la planche (haut, bas, gauche, droite) et placez-la dans chaque case de la grille.</li>
+            <li>Pas besoin de s'arrêter : déplacez <b>lentement</b> l'iPad, un <b>bip</b> à chaque vue prise. Faites le tour de la planche en l'inclinant (haut, bas, gauche, droite) et passez par chaque case de la grille.</li>
             <li>Dès 15 vues, chaque nouvelle vue affine la focale. Quand la barre « Précision » est pleine (0,5 %), la calibration se valide toute seule (flash) et l'acquisition SCANTAG démarre.</li>
         </ol>
         <div class="buttons">
@@ -410,7 +410,7 @@ body.mode-calib .scan-only, body:not(.mode-calib) .calib-only { display: none !i
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V10.8";
+const VERSION = "V10.9";
 
 /*
   MESURES D'IMPRESSION (V10.2)
@@ -965,7 +965,7 @@ const CALIB_MIN_TAGS = 10;            // tags de la planche visibles pour garder
 const CALIB_MIN_VIEWS = 12;           // vues minimum pour calculer
 const CALIB_TARGET_VIEWS = 15;        // calcul automatique à partir de 15 vues
 const CALIB_MIN_TILTED = 6;           // vues inclinées (≥ 15°) nécessaires : sans elles la focale est mal définie
-const CALIB_STILL_PX = 4;             // déplacement maximal des coins entre deux analyses (iPad tenu à la main)
+const CALIB_STILL_PX = 15;            // V10.9 : prise en continu, seuls les mouvements brusques sont refusés (le flou est contrôlé à part)
 const CALIB_MAX_BLUR_PX = 2.2;        // flou maximal d'une vue de calibration
 const CALIB_MAX_RMS_PX = 1.2;         // validation directe : écart résiduel
 const CALIB_MAX_FSTD_RATIO = 0.004;   // validation directe : focale connue à 0,4 % près
@@ -987,7 +987,8 @@ let calibBest = null;                 // meilleur résultat obtenu (repli si la 
 let calibLastMotion = null, calibLastBlur = null, calibLastState = "", calibLastTilt = null;
 let calibLastResult = null;
 let calibLastError = "";
-let calibHistory = [];                // focales des derniers calculs (stabilité)
+let calibHistory = [];
+let calibLastReject = "";                // focales des derniers calculs (stabilité)
 let calibPrecision = null;            // précision atteinte sur la focale (fraction)
 const CALIB_TARGET_PRECISION = 0.005; // objectif : focale connue à 0,5 % près -> passage automatique
 const CALIB_MAX_VIEWS = 40;           // dernier calcul (affiché pour comprendre un refus)
@@ -1375,7 +1376,7 @@ function calibProcess(markers) {
     }
 
     /* iPad immobile : coins quasi identiques à l'image précédente. */
-    let still = false;
+    let still = true;
     if (calibPrev) {
         const prev = new Map(calibPrev.map(p => [p.id + ":" + p.X + ":" + p.Y, p]));
         let s = 0, n = 0;
@@ -1399,7 +1400,7 @@ function calibProcess(markers) {
     for (const v of calibViews) {
         const angle = Math.acos(Math.min(1, Math.max(-1, vecDot(geo.normal, v.normal)))) * 180 / Math.PI;
         const shift = Math.hypot(geo.center[0] - v.center[0], geo.center[1] - v.center[1]) / diag;
-        novelty = Math.min(novelty, angle / 8 + shift / 0.12);
+        novelty = Math.min(novelty, angle / 6 + shift / 0.10);
     }
     calibLastTilt = geo.tilt;
     if (novelty < 1) return { state: "same", tags: obs.tags, tilt: geo.tilt };
@@ -1435,7 +1436,8 @@ function computeCalibration(manual) {
         calibLastError = errorText(error);
     }
     calibLastResult = res;
-    const sane = !!res && Number.isFinite(res.rms) && Number.isFinite(res.fx) && res.hfovDeg > 35 && res.hfovDeg < 100 && res.rms <= 8;
+    const sane = !!res && Number.isFinite(res.rms) && Number.isFinite(res.fx) && res.hfovDeg > 20 && res.hfovDeg < 130 && res.rms <= 15;
+    calibLastReject = !res ? "calcul impossible" : !sane ? ("résultat incohérent (écart " + fmt(res.rms, 1) + " px, angle " + fmt(res.hfovDeg, 1) + "°)") : "";
 
     /*
       Précision atteinte = la plus mauvaise de :
@@ -1456,7 +1458,9 @@ function computeCalibration(manual) {
     }
 
     const direct = sane && res.rms <= CALIB_MAX_RMS_PX && res.fStd && res.fStd / res.fx <= CALIB_MAX_FSTD_RATIO;
-    if (direct || (sane && calibPrecision <= CALIB_TARGET_PRECISION)) {
+    /* Repli : à partir de 25 vues, une focale à 1 % près suffit. */
+    const fallback = sane && calibViews.length >= 25 && calibPrecision <= 2 * CALIB_TARGET_PRECISION;
+    if (direct || fallback || (sane && calibPrecision <= CALIB_TARGET_PRECISION)) {
         acceptCalibration(res);
         if (res.rms > 2) {
             calibNote = "<span class='warning'>Calibration validée (écart " + fmt(res.rms, 2) +
@@ -1465,7 +1469,7 @@ function computeCalibration(manual) {
         }
         return;
     }
-    if (manual && calibBest) {
+    if (manual && calibBest && (calibBest.precision || Infinity) <= 0.02) {
         acceptCalibration(calibBest);
         calibNote = "<span class='warning'>Calibration validée manuellement (focale à ± " +
             fmt(100 * (calibBest.precision || 0), 2) + " %).</span>";
@@ -1542,7 +1546,7 @@ function enterCalibrationMode(reason) {
     calibHistory = [];
     calibPrecision = null;
     document.body.classList.add("mode-calib");
-    setMessage("Étape 1 : calibration", reason || "Présentez la planche de calibration en entier, iPad immobile.", "warning");
+    setMessage("Étape 1 : calibration", reason || "Présentez la planche de calibration en entier et déplacez lentement l'iPad.", "warning");
     updateCalibUI();
     updateSteps();
 }
@@ -1861,6 +1865,7 @@ function updateCalibUI() {
               (calibLastResult ? "<br>Dernier calcul : écart " + calibLastResult.rms.toFixed(2) + " px, focale ± " +
                   (calibLastResult.fStd ? (100 * calibLastResult.fStd / calibLastResult.fx).toFixed(2) : "—") + " %, angle de vue " +
                   calibLastResult.hfovDeg.toFixed(1) + "°" : "") +
+              (calibLastReject ? "<br><span class='error'>Refus : " + escapeHtml(calibLastReject) + "</span>" : "") +
               (calibNote ? "<br>" + calibNote : "")
             : "";
     }
@@ -1915,7 +1920,7 @@ function calibStatusMessage(res) {
         : "Placez la planche dans les cases de la grille encore vides.";
     const texts = {
         board: (res.tags ? "Planche vue en partie (" + res.tags + " tags) : reculez un peu." : "Présentez la planche de calibration en entier."),
-        move: "Tenez l'iPad immobile une seconde.",
+        move: "Trop rapide : ralentissez le mouvement.",
         blur: "Image floue : immobilisez l'iPad, attendez la mise au point.",
         same: "Vue déjà prise. " + hint,
         added: "Vue prise ✓ " + hint
