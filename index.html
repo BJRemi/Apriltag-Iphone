@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V8.6</title>
+<title>AprilTag iPad V8.9</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -219,7 +219,7 @@ button:disabled { opacity: .32; }
     </div>
 
     <div class="buttons">
-        <button id="exportAll" class="export main" disabled>Exporter les STL</button>
+        <button id="exportAll" class="export main" disabled>Exporter les STL (1 par cube)</button>
         <button id="exportA" class="export" disabled>A seul</button>
         <button id="exportB" class="export" disabled>B seul</button>
     </div>
@@ -251,7 +251,7 @@ button:disabled { opacity: .32; }
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V8.6";
+const VERSION = "V8.9";
 
 const TAG_SIZE_M = 0.008;             // côté du carré noir du tag (sans la marge blanche)
 const CAMERA_HFOV_DEG = 65;
@@ -309,7 +309,10 @@ const OVERLAY_MAX_SCALE = 2;
   LES DEUX CUBES
 
   Pour chaque cube :
-  - faces    : ID du tag sur la face +X, +Y et +Z du repère du cube ;
+  - faces    : ID du tag sur la face +X, +Y et +Z du repère du cube
+               (une face sans tag est simplement omise) ;
+  - dots     : face portant la grille de 3 × 3 points (normale dans le
+               repère du cube, pas et diamètre des points) ;
   - edgeM    : arête du cube en mètres ;
   - stlName  : fichier STL (binaire, en mm) placé à côté de index.html ;
   - stlOffsetM : position de l'origine du STL dans le repère du cube.
@@ -318,10 +321,21 @@ const OVERLAY_MAX_SCALE = 2;
   Le cube A sert de référence : à l'export, le STL A reste inchangé
   et le STL B est replacé dans le système de coordonnées du STL A.
 */
+/* Face à points : 3 × 3 points Ø 1,2 mm, pas 10/3 mm, centrés sur la face −Y. */
+const DOT_FACE = { normal: [0, -1, 0], pitchM: 0.010 / 3, diameterM: 0.0012 };
+
+/* Affinage de la pose */
+const FIT_MAX_RMS_PX = 2.5;          // au-delà, l'affinage est jugé faux et ignoré
+const DOT_MIN_CONTRAST = 25;         // écart de gris minimal entre point et fond
+const DOT_PIXEL_OFFSET = 0.5;        // centre du pixel (i, j) = (i + 0,5 ; j + 0,5)
+const DOT_WEIGHT = 9;                // un centre de point est ~3 fois plus précis qu'un coin de tag
+
 const CUBE_CONFIGS = [
     {
         key: "A",
-        faces: { xPlus: 4, yPlus: 2, zPlus: 7 },      // ID 4 à gauche, ID 2 à droite, ID 7 dessus
+        faces: { xPlus: 2, zPlus: 7 },       // +X vers ID 2 (droite), +Z vers ID 7 (dessus)
+        dots: DOT_FACE,                      // −Y : face à points (à la place de l'ancien ID 4)
+        /* Ancien cube à 3 tags : faces: { xPlus: 2, yPlus: 4, zPlus: 7 }, ySign: -1, sans dots */
         edgeM: 0.010,
         stlName: "IOC-A.stl",
         stlOffsetM: [0, 0, -0.010],
@@ -329,7 +343,8 @@ const CUBE_CONFIGS = [
     },
     {
         key: "B",
-        faces: { xPlus: 14, yPlus: 12, zPlus: 17 },
+        faces: { xPlus: 12, zPlus: 17 },
+        dots: DOT_FACE,
         edgeM: 0.010,
         stlName: "IOC-A.stl",             // à remplacer si le cube B porte un autre STL
         stlOffsetM: [0, 0, -0.010],
@@ -406,8 +421,15 @@ let sinceBest = 0;
 function makeCube(config) {
     return {
         ...config,
-        ids: new Set([config.faces.xPlus, config.faces.yPlus, config.faces.zPlus]),
-        ySign: 1,              // sens de la face +Y, appris quand 3 faces sont visibles
+        ids: new Set(
+            [config.faces.xPlus, config.faces.yPlus, config.faces.zPlus]
+                .filter(id => id !== undefined)
+        ),
+        tagCorners: buildTagCorners(config),
+        dotPoints: config.dots ? buildDotPoints(config.dots, config.edgeM) : null,
+        tagRot: {},                 // orientation de chaque tag dans le cube, apprise en cours de suivi
+        fit: null,
+        ySign: config.ySign || 1,   // sens de la face Y, vérifié quand 3 faces sont visibles
         mesh: null,
         palette: null,
         stlState: "non chargé",
@@ -422,6 +444,48 @@ function makeCube(config) {
         held: false,
         visibleIds: []
     };
+}
+
+/* Base (a, b) du plan d'une face de normale n (axe du cube). */
+function faceBasis(n) {
+    const a = Math.abs(n[0]) > 0.5 ? [0, 1, 0] : [1, 0, 0];
+    return { a, b: vecCross(n, a) };
+}
+
+/* Coins du carré noir de chaque tag, en mètres dans le repère du cube, dans l'ordre du tour. */
+function buildTagCorners(config) {
+    const h = config.edgeM / 2;
+    const s = TAG_SIZE_M / 2;
+    const normals = {
+        xPlus: [1, 0, 0],
+        yPlus: [0, config.ySign || 1, 0],
+        zPlus: [0, 0, 1]
+    };
+    const result = {};
+    for (const key of ["xPlus", "yPlus", "zPlus"]) {
+        const id = config.faces[key];
+        if (id === undefined) continue;
+        const n = normals[key];
+        const { a, b } = faceBasis(n);
+        const c = vecScale(n, h);
+        result[id] = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([i, j]) =>
+            vecAdd(c, vecAdd(vecScale(a, i * s), vecScale(b, j * s)))
+        );
+    }
+    return result;
+}
+
+/* Centres des 9 points, en mètres dans le repère du cube. */
+function buildDotPoints(dots, edgeM) {
+    const { a, b } = faceBasis(dots.normal);
+    const c = vecScale(dots.normal, edgeM / 2);
+    const points = [];
+    for (const i of [-1, 0, 1]) {
+        for (const j of [-1, 0, 1]) {
+            points.push(vecAdd(c, vecAdd(vecScale(a, i * dots.pitchM), vecScale(b, j * dots.pitchM))));
+        }
+    }
+    return points;
 }
 
 const cubes = CUBE_CONFIGS.map(makeCube);
@@ -444,6 +508,7 @@ function resetCubeTracking(cube) {
     cube.frame = null;
     cube.held = false;
     cube.visibleIds = [];
+    cube.fit = null;
 }
 
 
@@ -1047,10 +1112,26 @@ function updateCube(cube, markers, now) {
     const estimate = estimateCubeCenter(cube, markers);
     cube.estimate = estimate;
 
-    if (estimate) {
-        cube.center = [...updateSmoothedCenter(cube, estimate.center)];
+    cube.fit = null;
 
-        const rawFrame = estimateCubeFrame(cube, markers, estimate.center);
+    if (estimate) {
+        let origin = estimate.center;
+        let rawFrame =
+            estimateCubeFrame(cube, markers, estimate.center) ||
+            frameFromSingleTag(cube, markers);
+
+        /* Affinage sur tous les points connus : coins des tags + centres des points. */
+        if (rawFrame) {
+            const fit = refinePose(cube, markers, { origin, ...rawFrame });
+            if (fit && fit.rms <= FIT_MAX_RMS_PX) {
+                cube.fit = fit;
+                origin = fit.origin;
+                rawFrame = { x: fit.x, y: fit.y, z: fit.z };
+                learnTagRotations(cube, markers, fit);
+            }
+        }
+
+        cube.center = [...updateSmoothedCenter(cube, origin)];
 
         if (rawFrame) {
             const smooth = updateSmoothedFrame(cube, rawFrame);
@@ -1078,6 +1159,355 @@ function updateCube(cube, markers, now) {
         cube.lastRawCenter = null;
         cube.stabilityMm = null;
     }
+}
+
+
+/* ============================================================
+   AFFINAGE DE LA POSE (TAGS + POINTS)
+
+   La pose de départ (centre + axes) vient des tags. On cherche ensuite
+   la pose du cube qui fait coïncider au mieux, dans l'image :
+   - les 4 coins de chaque tag visible ;
+   - les centres des points de la face à points, mesurés finement
+     autour de leur position prévue.
+   Méthode : moindres carrés (Levenberg-Marquardt) sur les 6 degrés
+   de liberté de la pose, à partir des écarts en pixels.
+============================================================ */
+
+function poseToCamera(pose, P) {
+    return vecAdd(pose.t, vecAdd(vecAdd(vecScale(pose.R[0], P[0]), vecScale(pose.R[1], P[1])), vecScale(pose.R[2], P[2])));
+}
+
+function projectUV(c) {
+    if (c[2] <= 1e-4) return null;
+    return [cameraModel.fx * c[0] / c[2] + cameraModel.cx, cameraModel.fy * c[1] / c[2] + cameraModel.cy];
+}
+
+/* Rotation d'un vecteur v autour de l'axe w (vecteur rotation, en radians). */
+function rotateVec(v, w) {
+    const angle = vecLength(w);
+    if (angle < 1e-12) return v;
+    const k = vecScale(w, 1 / angle);
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    return vecAdd(
+        vecAdd(vecScale(v, cos), vecScale(vecCross(k, v), sin)),
+        vecScale(k, vecDot(k, v) * (1 - cos))
+    );
+}
+
+function applyDelta(pose, d) {
+    const w = [d[0], d[1], d[2]];
+    let x = vecNormalize(rotateVec(pose.R[0], w));
+    let z = orthoNormalize(rotateVec(pose.R[2], w), x) || pose.R[2];
+    return { R: [x, vecCross(z, x), z], t: vecAdd(pose.t, [d[3], d[4], d[5]]) };
+}
+
+function reprojection(obs, pose) {
+    const r = new Float64Array(obs.length * 2);
+    for (let i = 0; i < obs.length; i++) {
+        const p = projectUV(poseToCamera(pose, obs[i].P));
+        if (!p) return null;
+        const s = obs[i].s || 1;                 // racine du poids de la mesure
+        r[2 * i] = (p[0] - obs[i].u) * s;
+        r[2 * i + 1] = (p[1] - obs[i].v) * s;
+    }
+    return r;
+}
+
+function sumSquares(r) {
+    let s = 0;
+    for (let i = 0; i < r.length; i++) s += r[i] * r[i];
+    return s;
+}
+
+/* Résolution d'un petit système linéaire (élimination de Gauss). */
+function solveLinear(A, b) {
+    const n = b.length;
+    const M = A.map((row, i) => [...row, b[i]]);
+    for (let c = 0; c < n; c++) {
+        let p = c;
+        for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+        if (Math.abs(M[p][c]) < 1e-18) return null;
+        [M[c], M[p]] = [M[p], M[c]];
+        for (let r = 0; r < n; r++) {
+            if (r === c) continue;
+            const f = M[r][c] / M[c][c];
+            for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k];
+        }
+    }
+    return M.map((row, i) => row[n] / row[i]);
+}
+
+function optimizePose(obs, pose, iterations = 12) {
+    let r = reprojection(obs, pose);
+    if (!r) return pose;
+    let cost = sumSquares(r);
+    let lambda = 1e-3;
+    const steps = [1e-5, 1e-5, 1e-5, 1e-6, 1e-6, 1e-6];
+
+    for (let it = 0; it < iterations; it++) {
+        const J = [];
+        for (let k = 0; k < 6; k++) {
+            const d = [0, 0, 0, 0, 0, 0];
+            d[k] = steps[k];
+            const rk = reprojection(obs, applyDelta(pose, d));
+            if (!rk) return pose;
+            const col = new Float64Array(r.length);
+            for (let i = 0; i < r.length; i++) col[i] = (rk[i] - r[i]) / steps[k];
+            J.push(col);
+        }
+
+        const A = [], g = [];
+        for (let a = 0; a < 6; a++) {
+            A.push([]);
+            let s = 0;
+            for (let i = 0; i < r.length; i++) s += J[a][i] * r[i];
+            g.push(-s);
+            for (let b = 0; b < 6; b++) {
+                let t = 0;
+                for (let i = 0; i < r.length; i++) t += J[a][i] * J[b][i];
+                A[a].push(t);
+            }
+        }
+
+        let improved = false;
+        for (let attempt = 0; attempt < 6 && !improved; attempt++) {
+            const Ad = A.map((row, i) => row.map((v, j) => (i === j ? v * (1 + lambda) + 1e-12 : v)));
+            const d = solveLinear(Ad, g);
+            if (!d) break;
+            const candidate = applyDelta(pose, d);
+            const rc = reprojection(obs, candidate);
+            if (rc && sumSquares(rc) < cost) {
+                pose = candidate;
+                r = rc;
+                const previous = cost;
+                cost = sumSquares(rc);
+                lambda = Math.max(lambda / 3, 1e-7);
+                improved = true;
+                if (previous - cost < 1e-6 * previous) it = iterations;
+            }
+            else {
+                lambda *= 8;
+            }
+        }
+        if (!improved) break;
+    }
+    return pose;
+}
+
+/* Associe les 4 coins détectés d'un tag à ses 4 coins connus (8 ordres possibles testés). */
+function matchTagCorners(known, detected, pose) {
+    const projected = known.map(P => projectUV(poseToCamera(pose, P)));
+    if (projected.some(p => !p)) return null;
+    let best = null;
+    for (const dir of [1, -1]) {
+        for (let shift = 0; shift < 4; shift++) {
+            let err = 0;
+            const order = [];
+            for (let k = 0; k < 4; k++) {
+                const idx = ((shift + dir * k) % 4 + 4) % 4;
+                order.push(idx);
+                err += Math.hypot(projected[idx][0] - detected[k].x, projected[idx][1] - detected[k].y);
+            }
+            if (!best || err < best.err) best = { err, order };
+        }
+    }
+    return best;
+}
+
+/*
+  Centre d'un point noir mesuré dans l'image d'analyse, autour d'une position prévue.
+  Chaque pixel pèse selon sa « noirceur » (0 = fond blanc, 1 = noir plein), dans un
+  disque recentré à chaque passe : les pixels de bord partiellement noirs comptent
+  pour leur juste part, ce qui donne un centre à une fraction de pixel près.
+*/
+function measureDot(u0, v0, halfWindow, radiusPx) {
+    const w = analysis.width, h = analysis.height;
+    const x0 = Math.max(0, Math.floor(u0 - halfWindow)), x1 = Math.min(w - 1, Math.ceil(u0 + halfWindow));
+    const y0 = Math.max(0, Math.floor(v0 - halfWindow)), y1 = Math.min(h - 1, Math.ceil(v0 + halfWindow));
+    if (x1 - x0 < 4 || y1 - y0 < 4) return null;
+
+    /* Fenêtre circulaire : elle évite d'attraper le noir d'un tag voisin dans les coins. */
+    const inWindow = (x, y) => {
+        const du = x + DOT_PIXEL_OFFSET - u0, dv = y + DOT_PIXEL_OFFSET - v0;
+        return du * du + dv * dv <= halfWindow * halfWindow;
+    };
+
+    /* Niveaux du noir et du fond dans la fenêtre. */
+    const values = [];
+    for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) if (inWindow(x, y)) values.push(grayBuffer[y * w + x]);
+    }
+    values.sort((a, b) => a - b);
+    const black = values[Math.floor(values.length * 0.03)];
+    const white = values[Math.floor(values.length * 0.6)];
+    if (white - black < DOT_MIN_CONTRAST) return null;
+
+    /* Premier centre : pixels nettement sombres. */
+    let cu = u0, cv = v0;
+    const darkLimit = (black + white) / 2;
+    let sx = 0, sy = 0, n = 0;
+    for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+            if (inWindow(x, y) && grayBuffer[y * w + x] < darkLimit) {
+                sx += x + DOT_PIXEL_OFFSET;
+                sy += y + DOT_PIXEL_OFFSET;
+                n++;
+            }
+        }
+    }
+    const expectedArea = Math.PI * radiusPx * radiusPx;
+    if (n < expectedArea * 0.3 || n > expectedArea * 3) return null;
+    cu = sx / n;
+    cv = sy / n;
+
+    /* Affinage : centroïde de la noirceur dans un disque recentré. */
+    const R = radiusPx * 1.7 + 1;
+    for (let pass = 0; pass < 3; pass++) {
+        let sw = 0, su = 0, sv = 0;
+        const ya = Math.max(0, Math.floor(cv - R)), yb = Math.min(h - 1, Math.ceil(cv + R));
+        const xa = Math.max(0, Math.floor(cu - R)), xb = Math.min(w - 1, Math.ceil(cu + R));
+        for (let y = ya; y <= yb; y++) {
+            for (let x = xa; x <= xb; x++) {
+                const px = x + DOT_PIXEL_OFFSET, py = y + DOT_PIXEL_OFFSET;
+                if ((px - cu) * (px - cu) + (py - cv) * (py - cv) > R * R) continue;
+                const darkness = Math.min(1, Math.max(0, (white - grayBuffer[y * w + x]) / (white - black)));
+                sw += darkness;
+                su += darkness * px;
+                sv += darkness * py;
+            }
+        }
+        if (sw <= 0) return null;
+        cu = su / sw;
+        cv = sv / sw;
+    }
+
+    return [cu, cv];
+}
+
+/* Mesure des points de la face à points, à partir d'une pose approchée. */
+function detectDots(cube, pose) {
+    if (!cube.dotPoints || !grayBuffer || !analysis.width) return [];
+
+    const faceCenter = poseToCamera(pose, vecScale(cube.dots.normal, cube.edgeM / 2));
+    const normalCam = vecAdd(
+        vecAdd(vecScale(pose.R[0], cube.dots.normal[0]), vecScale(pose.R[1], cube.dots.normal[1])),
+        vecScale(pose.R[2], cube.dots.normal[2])
+    );
+    /* Face trop de biais ou tournée vers l'arrière : on ne la lit pas. */
+    if (vecDot(normalCam, vecNormalize(faceCenter)) > -0.25) return [];
+
+    const projected = cube.dotPoints.map(P => projectUV(poseToCamera(pose, P)));
+    if (projected.some(p => !p)) return [];
+
+    /* Pas des points en pixels, d'après les points voisins du centre. */
+    const c = projected[4];
+    const pitchPx = Math.min(
+        Math.hypot(projected[1][0] - c[0], projected[1][1] - c[1]),
+        Math.hypot(projected[3][0] - c[0], projected[3][1] - c[1])
+    );
+    if (pitchPx < 6) return [];
+
+    const radiusPx = pitchPx * (cube.dots.diameterM / 2) / cube.dots.pitchM;
+    const found = [];
+
+    for (let i = 0; i < projected.length; i++) {
+        const [u, v] = projected[i];
+        const m = measureDot(u, v, pitchPx * 0.42, radiusPx);
+        if (!m) continue;
+        if (Math.hypot(m[0] - u, m[1] - v) > pitchPx * 0.3) continue;
+        found.push({ P: cube.dotPoints[i], u: m[0], v: m[1], s: Math.sqrt(DOT_WEIGHT) });
+    }
+    return found;
+}
+
+/* Pose affinée du cube, ou null si les données sont insuffisantes. */
+function refinePose(cube, markers, init) {
+    if (!cameraModel) return null;
+    let pose = { R: [init.x, init.y, init.z], t: init.origin };
+
+    const tagObs = [];
+    for (const marker of markers) {
+        const known = cube.tagCorners[Number(marker.id)];
+        if (!known || !marker.corners || marker.corners.length < 4) continue;
+        const match = matchTagCorners(known, marker.corners, pose);
+        if (!match) continue;
+        for (let k = 0; k < 4; k++) {
+            tagObs.push({ P: known[match.order[k]], u: marker.corners[k].x, v: marker.corners[k].y });
+        }
+    }
+    if (tagObs.length < 4) return null;
+
+    pose = optimizePose(tagObs, pose);
+
+    /* Deux passes : la seconde mesure les points avec la pose déjà améliorée. */
+    let dots = [];
+    for (let pass = 0; pass < 2; pass++) {
+        dots = detectDots(cube, pose);
+        if (dots.length < 3) {
+            dots = [];
+            break;
+        }
+        pose = optimizePose(tagObs.concat(dots), pose);
+    }
+
+    /* Points aberrants (reflet, poussière) : retirés puis nouveau calcul. */
+    if (dots.length) {
+        const kept = dots.filter(o => {
+            const p = projectUV(poseToCamera(pose, o.P));
+            return p && Math.hypot(p[0] - o.u, p[1] - o.v) < 2;
+        });
+        if (kept.length !== dots.length && kept.length >= 3) {
+            dots = kept;
+            pose = optimizePose(tagObs.concat(dots), pose);
+        }
+    }
+
+    /* Écart moyen en pixels, sans pondération, pour juger de la qualité. */
+    const r = reprojection(tagObs.concat(dots).map(o => ({ ...o, s: 1 })), pose);
+    if (!r) return null;
+
+    return {
+        origin: pose.t,
+        x: pose.R[0],
+        y: pose.R[1],
+        z: pose.R[2],
+        rms: Math.sqrt(sumSquares(r) / (r.length / 2)),
+        nTagPoints: tagObs.length,
+        dots: dots.map(o => ({ u: o.u, v: o.v }))
+    };
+}
+
+/* Orientation de chaque tag dans le repère du cube, mémorisée quand la pose est sûre,
+   pour pouvoir suivre le cube avec un seul tag visible. */
+function learnTagRotations(cube, markers, fit) {
+    if (fit.nTagPoints < 8 && fit.dots.length < 5) return;
+    for (const marker of markers) {
+        const id = Number(marker.id);
+        if (!cube.tagCorners[id]) continue;
+        const axes = poseAxes(marker);
+        if (!axes) continue;
+        const inCube = v => [vecDot(v, fit.x), vecDot(v, fit.y), vecDot(v, fit.z)];
+        cube.tagRot[id] = { x: inCube(axes.x), y: inCube(axes.y), z: inCube(axes.z) };
+    }
+}
+
+function frameFromSingleTag(cube, markers) {
+    for (const marker of markers) {
+        const q = cube.tagRot[Number(marker.id)];
+        const axes = poseAxes(marker);
+        if (!q || !axes) continue;
+        /* Axe j du cube = somme sur les axes du tag de (composante j) × axe du tag. */
+        const axis = j => vecAdd(
+            vecAdd(vecScale(axes.x, q.x[j]), vecScale(axes.y, q.y[j])),
+            vecScale(axes.z, q.z[j])
+        );
+        const x = vecNormalize(axis(0));
+        const z = orthoNormalize(axis(2), x);
+        if (!z) continue;
+        return { x, y: vecCross(z, x), z };
+    }
+    return null;
 }
 
 
@@ -1595,22 +2025,147 @@ function exportCube(cube) {
 }
 
 
-/* Les deux STL réunis dans un seul fichier, B placé par rapport à A. */
+/*
+  EXPORT « UN CUBE = UN STL »
+
+  Chaque cube donne son propre fichier STL, tous dans le système de
+  coordonnées du STL A : importés ensemble dans Blender ou un logiciel
+  dentaire, ils arrivent déjà placés, mais restent des objets séparés.
+
+  Sur iPad, les fichiers passent par la feuille de partage
+  (« Enregistrer dans Fichiers »). Sinon, ils sont téléchargés
+  dans une archive ZIP qui contient un STL par cube.
+*/
+
+function cubeExportFiles() {
+    return cubes.map(cube => {
+        const base = cube.stlName.replace(/\.stl$/i, "");
+        const transform = cube === cubeA ? null : makeBToATransform(recorded.rel);
+        return {
+            name: base + "_cube_" + cube.key + ".stl",
+            data: new Uint8Array(buildBinarySTL(
+                [[cube.mesh, transform]],
+                "AprilTag " + VERSION + " cube " + cube.key
+            ))
+        };
+    });
+}
+
+const CRC_TABLE = (function() {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        table[n] = c >>> 0;
+    }
+    return table;
+})();
+
+function crc32(bytes) {
+    let c = 0xffffffff;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+}
+
+/* Archive ZIP simple, sans compression. */
+function makeZip(files) {
+    const encoder = new TextEncoder();
+    const entries = files.map(file => ({
+        name: encoder.encode(file.name),
+        data: file.data,
+        crc: crc32(file.data)
+    }));
+
+    let size = 22;
+    for (const e of entries) size += 30 + e.name.length + e.data.length + 46 + e.name.length;
+
+    const buffer = new ArrayBuffer(size);
+    const view = new DataView(buffer);
+    const bytes = new Uint8Array(buffer);
+    let offset = 0;
+
+    for (const e of entries) {
+        e.offset = offset;
+        view.setUint32(offset, 0x04034b50, true);
+        view.setUint16(offset + 4, 20, true);
+        view.setUint16(offset + 6, 0x0800, true);           // noms en UTF-8
+        view.setUint16(offset + 8, 0, true);                 // stocké, sans compression
+        view.setUint16(offset + 10, 0, true);
+        view.setUint16(offset + 12, 0x21, true);             // 1er janvier 1980
+        view.setUint32(offset + 14, e.crc, true);
+        view.setUint32(offset + 18, e.data.length, true);
+        view.setUint32(offset + 22, e.data.length, true);
+        view.setUint16(offset + 26, e.name.length, true);
+        view.setUint16(offset + 28, 0, true);
+        bytes.set(e.name, offset + 30);
+        bytes.set(e.data, offset + 30 + e.name.length);
+        offset += 30 + e.name.length + e.data.length;
+    }
+
+    const centralStart = offset;
+
+    for (const e of entries) {
+        view.setUint32(offset, 0x02014b50, true);
+        view.setUint16(offset + 4, 20, true);
+        view.setUint16(offset + 6, 20, true);
+        view.setUint16(offset + 8, 0x0800, true);
+        view.setUint16(offset + 10, 0, true);
+        view.setUint16(offset + 12, 0, true);
+        view.setUint16(offset + 14, 0x21, true);
+        view.setUint32(offset + 16, e.crc, true);
+        view.setUint32(offset + 20, e.data.length, true);
+        view.setUint32(offset + 24, e.data.length, true);
+        view.setUint16(offset + 28, e.name.length, true);
+        view.setUint32(offset + 42, e.offset, true);
+        bytes.set(e.name, offset + 46);
+        offset += 46 + e.name.length;
+    }
+
+    view.setUint32(offset, 0x06054b50, true);
+    view.setUint16(offset + 8, entries.length, true);
+    view.setUint16(offset + 10, entries.length, true);
+    view.setUint32(offset + 12, offset - centralStart, true);
+    view.setUint32(offset + 16, centralStart, true);
+
+    return buffer;
+}
+
 function exportAll() {
-    if (!recorded || !cubeA.mesh || !cubeB.mesh) {
-        setMessage("Export impossible", "Il faut une position enregistrée et les deux STL chargés.", "warning");
+    if (!recorded || cubes.some(cube => !cube.mesh)) {
+        setMessage("Export impossible", "Il faut une position enregistrée et tous les STL chargés.", "warning");
         return;
     }
 
-    const buffer = buildBinarySTL(
-        [[cubeA.mesh, null], [cubeB.mesh, makeBToATransform(recorded.rel)]],
-        "AprilTag " + VERSION + " STL A + B positionnes"
-    );
-    const fileName = "ensemble_A_B_positionne.stl";
+    const files = cubeExportFiles();
+    const names = files.map(f => f.name).join(", ");
 
-    downloadBuffer(buffer, fileName);
-    setMessage("Export des STL ✓", fileName, "ok");
+    /* iPad / iPhone : feuille de partage avec un fichier par cube. */
+    let shareFiles = null;
+    try {
+        shareFiles = files.map(f => new File([f.data], f.name, { type: "model/stl" }));
+        if (!navigator.canShare || !navigator.canShare({ files: shareFiles })) shareFiles = null;
+    }
+    catch (_) {
+        shareFiles = null;
+    }
+
+    if (shareFiles && !shareFailed) {
+        navigator.share({ files: shareFiles, title: "STL positionnés" })
+            .then(() => setMessage("Export des STL ✓", names, "ok"))
+            .catch(error => {
+                if (error && error.name === "AbortError") return;
+                setMessage("Partage impossible", "Touchez de nouveau pour recevoir une archive ZIP.", "warning");
+                shareFailed = true;
+            });
+        return;
+    }
+
+    const zipName = "STL_positionnes_" + files.length + "_cubes.zip";
+    downloadBuffer(makeZip(files), zipName);
+    setMessage("Export des STL ✓", zipName + " : " + names, "ok");
 }
+
+let shareFailed = false;
 
 
 /* ============================================================
@@ -1847,7 +2402,9 @@ async function scanFrame(timestamp) {
 function cubeStateText(cube) {
     if (cube.frame && !cube.held) return "suivi";
     if (cube.frame && cube.held) return "pose maintenue";
-    if (cube.visibleIds.length === 1) return "1 seule face visible (2 nécessaires)";
+    if (cube.visibleIds.length === 1 && !cube.tagRot[cube.visibleIds[0]]) {
+        return "1 seul tag : montrez une fois les 2 tags ensemble";
+    }
     if (cube.visibleIds.length > 1) return "pose incomplète";
     return "aucun tag visible";
 }
@@ -1904,7 +2461,8 @@ function updateStatus(markers) {
         const f = cube.faces;
         let line =
             "<span class='cube" + cube.key + "'>Cube " + cube.key + "</span>" +
-            " (ID " + f.xPlus + " / " + f.yPlus + " / " + f.zPlus + ") : " +
+            " (ID " + [f.xPlus, f.yPlus, f.zPlus].filter(id => id !== undefined).join(" / ") +
+            (cube.dots ? " + points" : "") + ") : " +
             cubeStateText(cube);
 
         if (cube.visibleIds.length) {
@@ -1915,6 +2473,12 @@ function updateStatus(markers) {
         }
         if (cube.stabilityMm !== null && cube.estimate) {
             line += " • " + stabilityLabel(cube.stabilityMm);
+        }
+        if (cube.fit) {
+            line +=
+                "<br>&nbsp;&nbsp;Ajustement : " + cube.fit.rms.toFixed(2) + " px" +
+                " • coins de tags : " + cube.fit.nTagPoints +
+                (cube.dots ? " • points : " + cube.fit.dots.length + " / 9" : "");
         }
         line +=
             "<br>&nbsp;&nbsp;STL " + cube.key + " : " +
@@ -2052,7 +2616,18 @@ function drawScene(markers) {
                 );
             }
         }
-        else if (cube.center) {
+        if (cube.fit && cube.fit.dots.length) {
+            overlayCtx.save();
+            overlayCtx.lineWidth = 1.2;
+            overlayCtx.strokeStyle = cubeColor(cube);
+            for (const d of cube.fit.dots) {
+                overlayCtx.beginPath();
+                overlayCtx.arc(d.u, d.v, 3.5, 0, Math.PI * 2);
+                overlayCtx.stroke();
+            }
+            overlayCtx.restore();
+        }
+        if (!cube.frame && cube.center) {
             /* Une seule face visible : centre estimé, sans orientation. */
             const c = project3D(cube.center);
             if (c) {
