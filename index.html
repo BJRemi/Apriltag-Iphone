@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V9.0</title>
+<title>AprilTag iPad V9.1</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -149,6 +149,23 @@ button:disabled { opacity: .32; }
 .export.main { flex: 2; }
 .export.main:not(:disabled) { background: var(--text); color: var(--bg); border-color: transparent; }
 
+.file-button {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 50px;
+    border: 1px dashed rgba(255, 255, 255, .25);
+    border-radius: 15px;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 12px;
+}
+
 .grid-caption { margin: 14px 4px 0; font-size: 12px; color: var(--muted); }
 
 .hidden { display: none; }
@@ -216,12 +233,19 @@ button:disabled { opacity: .32; }
     </div>
 
     <div class="buttons">
+        <label class="file-button">
+            <span id="stlLabel">Choisir le STL…</span>
+            <input id="stlInput" type="file" accept=".stl,model/stl,application/octet-stream" hidden>
+        </label>
+    </div>
+
+    <div class="buttons">
         <button id="record" class="record" disabled>Enregistrer la position</button>
         <button id="auto" class="auto on">Validation auto : oui</button>
     </div>
 
     <div class="buttons">
-        <button id="exportAll" class="export main" disabled>Exporter les STL (1 par cube)</button>
+        <button id="exportAll" class="export main" disabled>Exporter les 4 STL</button>
     </div>
 
     <div id="gridCaption" class="grid-caption"></div>
@@ -252,13 +276,13 @@ button:disabled { opacity: .32; }
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V9.0";
+const VERSION = "V9.1";
 
 const TAG_SIZE_M = 0.008;             // côté du carré noir du tag (sans la marge blanche)
 const CAMERA_HFOV_DEG = 65;
 
 /* Résolution d'analyse limitée pour préserver Safari/iPad. */
-const ANALYSIS_MAX_SIZE = 1280;        // tags de 8 mm : il faut une image fine
+const ANALYSIS_MAX_SIZE = 1920;        // pleine résolution de la vidéo : précision maximale
 const CAMERA_IDEAL_WIDTH = 1920;
 const CAMERA_IDEAL_HEIGHT = 1080;
 const QUAD_DECIMATE = 1.0;             // 1 = pleine résolution (plus lent, plus précis)
@@ -329,6 +353,8 @@ const DOT_FACE = { normal: [0, -1, 0], pitchM: 0.010 / 3, diameterM: 0.0012 };
 const FIT_MAX_RMS_PX = 2.5;          // au-delà, l'affinage est jugé faux et ignoré
 const DOT_MIN_CONTRAST = 25;         // écart de gris minimal entre point et fond
 const DOT_PIXEL_OFFSET = 0.5;        // centre du pixel (i, j) = (i + 0,5 ; j + 0,5)
+const DOT_MAX_RMS_PX = 1.0;          // points incohérents avec les tags au-delà : ignorés
+const DOT_MIN_FACING = 0.5;          // face à points lue seulement si vue à moins de 60°
 const DOT_WEIGHT = 9;                // un centre de point est ~3 fois plus précis qu'un coin de tag
 
 const CUBE_TEMPLATES = [
@@ -344,10 +370,25 @@ const CUBE_TEMPLATES = [
          stlName: "IOC-A.stl", stlOffsetM: [0, 0, -0.010] } */
 ];
 
-const MAX_CUBES = 6;
+const EXPECTED_CUBES = 4;            // nombre de cubes de la scène
+const MAX_CUBES = EXPECTED_CUBES + 2; // marge pour les fausses détections passagères
+const CONFIRM_FRAMES = 3;            // un cube n'est pris en compte qu'après 3 images
 const CLUSTER_RADIUS_RATIO = 0.6;    // tags d'un même cube : centres estimés à moins de 0,6 arête
 const TRACK_RADIUS_RATIO = 2.5;      // suivi d'une image à l'autre : déplacement maximal en arêtes
 const CUBE_FORGET_MS = 2000;         // cube oublié après 2 s sans être vu
+const UNCONFIRMED_FORGET_MS = 400;   // fausse détection passagère oubliée vite
+
+/*
+  MESURE PRÉCISE
+  À chaque image où les 4 cubes sont vus, la position de chacun par rapport
+  au cube 1 est mesurée sans lissage et gardée dans une mémoire glissante.
+  À l'export, la position retenue est la moyenne robuste de ces mesures
+  (valeurs aberrantes écartées).
+*/
+const MEASURE_BUFFER = 64;           // nombre de mesures gardées
+const MEASURE_MIN_SAMPLES = 16;      // minimum pour exporter
+const MEASURE_MOVE_MM = 3.0;         // écart à la médiane au-delà duquel une mesure est « hors place »
+const MEASURE_MOVE_FRAMES = 3;       // 3 mesures hors place de suite = un cube a vraiment bougé
 const CUBE_COLORS = [
     [125, 211, 252], [253, 186, 116], [134, 239, 172],
     [249, 168, 212], [196, 181, 253], [253, 224, 71]
@@ -371,6 +412,8 @@ const recordButton = document.getElementById("record");
 const autoButton = document.getElementById("auto");
 const exportAllButton = document.getElementById("exportAll");
 const gridCaption = document.getElementById("gridCaption");
+const stlInput = document.getElementById("stlInput");
+const stlLabel = document.getElementById("stlLabel");
 
 const statusEl = document.getElementById("status");
 const detailEl = document.getElementById("detail");
@@ -389,7 +432,7 @@ document.getElementById("version").textContent =
     VERSION;
 
 diagnostic.innerHTML =
-    VERSION + " prête.<br>Suivi de cubes identiques (jusqu'à " + MAX_CUBES + "), un STL par cube.";
+    VERSION + " prête.<br>Suivi de " + EXPECTED_CUBES + " cubes identiques, un STL par cube.";
 
 
 /* ============================================================
@@ -414,6 +457,12 @@ let recorded = null;
 
 /* Positions relatives en direct : { ref, rels: Map(cube -> position relative) }, ou null. */
 let liveSet = null;
+
+/* Mesure précise (positions brutes, sans lissage) */
+let measureBuffer = [];
+let measureKey = "";
+let measureMoveCount = 0;
+let nextCubeId = 1;
 
 /* Validation automatique */
 let autoEnabled = true;
@@ -490,17 +539,15 @@ for (const template of templates) {
 let cubes = [];
 
 function makeCube(template) {
-    const used = new Set(cubes.map(c => c.number));
-    if (recorded) for (const c of recorded.members) used.add(c.number);
-    let number = 1;
-    while (used.has(number)) number++;
-
     return {
         ...template,
         template,
-        number,
-        key: String(number),
-        color: CUBE_COLORS[(number - 1) % CUBE_COLORS.length],
+        id: nextCubeId++,           // identifiant interne, stable
+        number: 0,                  // numéro affiché (1 à 4), attribué de gauche à droite
+        seenCount: 0,
+        confirmed: false,
+        rawFrame: null,             // pose de l'image courante, sans lissage
+        get color() { return CUBE_COLORS[Math.max(0, this.number - 1) % CUBE_COLORS.length]; },
         palette: null,
         ySign: template.ySign || 1,
         lastSeen: 0,
@@ -1135,6 +1182,7 @@ function updateCube(cube, markers, now) {
     cube.estimate = estimate;
 
     cube.fit = null;
+    cube.rawFrame = null;
 
     if (estimate) {
         let origin = estimate.center;
@@ -1156,6 +1204,10 @@ function updateCube(cube, markers, now) {
             origin = fit.origin;
             rawFrame = { x: fit.x, y: fit.y, z: fit.z };
             learnTagRotations(cube, markers, fit);
+        }
+
+        if (rawFrame) {
+            cube.rawFrame = { origin: [...origin], x: rawFrame.x, y: rawFrame.y, z: rawFrame.z };
         }
 
         cube.center = [...updateSmoothedCenter(cube, origin)];
@@ -1421,8 +1473,8 @@ function detectDots(cube, pose) {
         vecAdd(vecScale(pose.R[0], cube.dots.normal[0]), vecScale(pose.R[1], cube.dots.normal[1])),
         vecScale(pose.R[2], cube.dots.normal[2])
     );
-    /* Face trop de biais ou tournée vers l'arrière : on ne la lit pas. */
-    if (vecDot(normalCam, vecNormalize(faceCenter)) > -0.25) return [];
+    /* Face trop de biais (plus de 60°) ou tournée vers l'arrière : on ne la lit pas. */
+    if (vecDot(normalCam, vecNormalize(faceCenter)) > -DOT_MIN_FACING) return [];
 
     const projected = cube.dotPoints.map(P => projectUV(poseToCamera(pose, P)));
     if (projected.some(p => !p)) return [];
@@ -1476,6 +1528,16 @@ function refinePose(cube, markers, init) {
             break;
         }
         pose = optimizePose(tagObs.concat(dots), pose);
+    }
+
+    /* Points mal lus dans l'ensemble (face rasante, flou) : on revient aux tags seuls. */
+    const tagsOnly = optimizePose(tagObs, { R: [init.x, init.y, init.z], t: init.origin });
+    if (dots.length) {
+        const r = reprojection(dots.map(o => ({ ...o, s: 1 })), pose);
+        if (!r || Math.sqrt(sumSquares(r) / dots.length) > DOT_MAX_RMS_PX) {
+            dots = [];
+            pose = tagsOnly;
+        }
     }
 
     /* Points aberrants (reflet, poussière) : retirés puis nouveau calcul. */
@@ -1668,8 +1730,6 @@ function updateCubes(markers, now) {
         assignment.set(cube, group);
     });
 
-    cubes.sort((p, q) => p.number - q.number);
-
     for (const cube of cubes) {
         const group = assignment.get(cube);
         const own = group ? group.markers : [];
@@ -1680,23 +1740,149 @@ function updateCubes(markers, now) {
         if (group) {
             cube.lastSeen = now;
             if (cube.center) cube.lastCenter = [...cube.center];
+            if (cube.frame) cube.seenCount++;
+            if (cube.seenCount >= CONFIRM_FRAMES) cube.confirmed = true;
         }
     }
 
-    /* Cubes disparus depuis un moment : oubliés, sauf s'ils font partie d'une position enregistrée. */
+    /* Cubes disparus : oubliés, sauf s'ils font partie d'une position enregistrée. */
     const keep = new Set(recorded ? recorded.members : []);
-    cubes = cubes.filter(cube => keep.has(cube) || now - cube.lastSeen <= CUBE_FORGET_MS);
+    cubes = cubes.filter(cube =>
+        keep.has(cube) ||
+        now - cube.lastSeen <= (cube.confirmed ? CUBE_FORGET_MS : UNCONFIRMED_FORGET_MS)
+    );
+
+    numberCubes();
+}
+
+/*
+  Numéros affichés : de gauche à droite dans l'image (le cube 1 est le plus à gauche).
+  Une fois la position enregistrée, les numéros des cubes enregistrés sont figés.
+*/
+function numberCubes() {
+    const frozen = new Set(recorded ? recorded.members : []);
+    let next = recorded ? recorded.members.length + 1 : 1;
+
+    const free = cubes
+        .filter(cube => cube.confirmed && !frozen.has(cube))
+        .map(cube => ({ cube, p: cube.lastCenter ? project3D(cube.lastCenter) : null }))
+        .sort((a, b) => (a.p ? a.p.x : 0) - (b.p ? b.p.x : 0));
+
+    const setNumber = (cube, n) => {
+        if (cube.number !== n) cube.palette = null;      // la couleur suit le numéro
+        cube.number = n;
+    };
+    for (const cube of cubes) if (!cube.confirmed && !frozen.has(cube)) setNumber(cube, 0);
+    for (const item of free) setNumber(item.cube, next++);
+
+    cubes.sort((p, q) => (p.number || 99) - (q.number || 99));
 }
 
 /* Positions relatives en direct, par rapport au cube de plus petit numéro. */
 function computeLiveSet() {
-    const tracked = cubes.filter(cube => cube.frame && !cube.held);
+    const tracked = cubes.filter(cube => cube.confirmed && cube.number > 0 && cube.frame && !cube.held);
     if (tracked.length < 2) return null;
 
     const ref = tracked[0];
     const rels = new Map();
     for (const cube of tracked.slice(1)) rels.set(cube, relativePose(ref.frame, cube.frame));
     return { ref, rels };
+}
+
+
+/* ============================================================
+   MESURE PRÉCISE (MOYENNE ROBUSTE DE POSES BRUTES)
+============================================================ */
+
+function updateMeasureBuffer() {
+    const tracked = cubes
+        .filter(cube => cube.confirmed && cube.number > 0 && cube.rawFrame && !cube.held)
+        .sort((p, q) => p.number - q.number);
+
+    /* Image incomplète (cube masqué un instant) : on l'ignore sans tout effacer. */
+    if (tracked.length !== EXPECTED_CUBES) return;
+
+    const key = tracked.map(cube => cube.id).join(",");
+    if (key !== measureKey) {
+        measureBuffer = [];
+        measureKey = key;
+    }
+
+    const ref = tracked[0];
+    const rels = new Map();
+    for (const cube of tracked.slice(1)) rels.set(cube, relativePose(ref.rawFrame, cube.rawFrame));
+    const sample = { ref, rels };
+
+    /*
+      Mesure loin de la médiane des précédentes : bruit ponctuel (gardé, la moyenne
+      robuste l'écartera) ou vrai déplacement si cela se répète plusieurs fois de suite.
+    */
+    if (measureBuffer.length >= 5) {
+        let away = false;
+        for (const [cube, rel] of rels) {
+            const list = measureBuffer.map(s => s.rels.get(cube).t);
+            const med = [0, 1, 2].map(k => median(list.map(t => t[k])));
+            if (vecLength(vecSub(rel.t, med)) * 1000 > MEASURE_MOVE_MM) away = true;
+        }
+        measureMoveCount = away ? measureMoveCount + 1 : 0;
+        if (measureMoveCount >= MEASURE_MOVE_FRAMES) {
+            measureBuffer = measureBuffer.slice(-(MEASURE_MOVE_FRAMES - 1));
+            measureMoveCount = 0;
+        }
+    }
+
+    measureBuffer.push(sample);
+    if (measureBuffer.length > MEASURE_BUFFER) measureBuffer.shift();
+}
+
+/* Moyenne robuste : médiane, rejet des valeurs aberrantes, puis moyenne des mesures gardées. */
+function robustRel(list) {
+    const med = [0, 1, 2].map(k => median(list.map(r => r.t[k])));
+    const dist = list.map(r => vecLength(vecSub(r.t, med)));
+    const limit = Math.max(3 * 1.4826 * median(dist), 1e-5);
+    let kept = list.filter((r, i) => dist[i] <= limit);
+
+    let mean = averageRel(kept);
+    if (!mean) return null;
+    const angles = kept.map(r => rotationAngleDeg(r, mean));
+    const angleLimit = Math.max(3 * 1.4826 * median(angles), 0.05);
+    kept = kept.filter((r, i) => angles[i] <= angleLimit);
+    mean = averageRel(kept);
+    if (!mean) return null;
+
+    const sdMm = Math.sqrt(kept.reduce((s, r) => s + vecLength(vecSub(r.t, mean.t)) ** 2, 0) / kept.length) * 1000;
+    const sdDeg = Math.sqrt(kept.reduce((s, r) => s + rotationAngleDeg(r, mean) ** 2, 0) / kept.length);
+    return { mean, sdMm, sdDeg, kept: kept.length };
+}
+
+/* Position la plus précise disponible pour les 4 cubes, ou null. */
+function preciseEstimate() {
+    if (measureBuffer.length < MEASURE_MIN_SAMPLES) return null;
+    const first = measureBuffer[0];
+    const means = new Map();
+    let spreadMm = 0, spreadDeg = 0, kept = Infinity;
+
+    for (const cube of first.rels.keys()) {
+        const r = robustRel(measureBuffer.map(sample => sample.rels.get(cube)));
+        if (!r) return null;
+        means.set(cube, r.mean);
+        spreadMm = Math.max(spreadMm, r.sdMm);
+        spreadDeg = Math.max(spreadDeg, r.sdDeg);
+        kept = Math.min(kept, r.kept);
+    }
+
+    return {
+        ref: first.ref,
+        members: [first.ref, ...first.rels.keys()],
+        means,
+        spreadMm,
+        spreadDeg,
+        samples: measureBuffer.length,
+        kept,
+        /* Incertitude de la moyenne : dispersion / racine du nombre de mesures. */
+        errorMm: spreadMm / Math.sqrt(kept),
+        errorDeg: spreadDeg / Math.sqrt(kept)
+    };
 }
 
 
@@ -2286,9 +2472,24 @@ function makeZip(files) {
     return buffer;
 }
 
+/* Une seule touche : fige la position la plus précise disponible, puis exporte les 4 STL. */
 function exportAll() {
-    if (!recorded || recorded.members.some(cube => !cube.template.mesh)) {
-        setMessage("Export impossible", "Il faut une position enregistrée et tous les STL chargés.", "warning");
+    if (!recorded) {
+        const precise = preciseEstimate();
+        if (!precise) {
+            setMessage(
+                "Mesure insuffisante",
+                "Gardez les " + EXPECTED_CUBES + " cubes immobiles et visibles (" +
+                measureBuffer.length + " / " + MEASURE_MIN_SAMPLES + " mesures).",
+                "warning"
+            );
+            return;
+        }
+        lockPosition(precise, false);
+    }
+
+    if (recorded.members.some(cube => !cube.template.mesh)) {
+        setMessage("Export impossible", "Le STL n'est pas chargé.", "warning");
         return;
     }
 
@@ -2370,6 +2571,12 @@ function windowStats(samples) {
     };
 }
 
+function resetMeasure() {
+    measureBuffer = [];
+    measureKey = "";
+    measureMoveCount = 0;
+}
+
 function resetStability() {
     relBuffer = [];
     bufferKey = "";
@@ -2380,7 +2587,17 @@ function resetStability() {
 }
 
 function lockPosition(stats, auto) {
+    /* Si la mesure précise couvre les mêmes cubes, c'est elle qui est retenue. */
+    const precise = preciseEstimate();
+    if (precise &&
+        precise.members.length === stats.members.length &&
+        precise.members.every((cube, i) => cube === stats.members[i])) {
+        stats = precise;
+    }
     recorded = {
+        samples: stats.samples || null,
+        errorMm: stats.errorMm ?? null,
+        errorDeg: stats.errorDeg ?? null,
         ref: stats.ref,
         members: stats.members,
         rels: stats.means,
@@ -2444,6 +2661,7 @@ function updateStability() {
     }
 
     if (!autoEnabled || !autoArmed) return;
+    if (stats.members.length !== EXPECTED_CUBES || measureBuffer.length < MEASURE_MIN_SAMPLES) return;
 
     /* Stable : on attend encore un peu pour retenir la meilleure fenêtre. */
     stableCount++;
@@ -2479,6 +2697,7 @@ function toggleRecord() {
         recorded = null;
         autoArmed = false;       // pas de nouvelle validation tant que rien n'a bougé
         resetStability();
+        resetMeasure();
         if (!stream) setMessage("Position libérée", "Démarrez la caméra pour un nouvel enregistrement.");
     }
     else if (stability) {
@@ -2528,7 +2747,13 @@ function updateButtonsAndGrid() {
     autoButton.textContent = "Validation auto : " + (autoEnabled ? "oui" : "non");
     autoButton.className = autoEnabled ? "auto on" : "auto";
 
-    exportAllButton.disabled = !recorded || recorded.members.some(cube => !cube.template.mesh);
+    exportAllButton.disabled =
+        !templates[0].mesh ||
+        (!recorded && measureBuffer.length < MEASURE_MIN_SAMPLES);
+    exportAllButton.textContent =
+        recorded || measureBuffer.length >= MEASURE_MIN_SAMPLES
+            ? "Exporter les " + EXPECTED_CUBES + " STL"
+            : "Mesure " + measureBuffer.length + " / " + MEASURE_MIN_SAMPLES;
 }
 
 
@@ -2556,6 +2781,7 @@ async function scanFrame(timestamp) {
 
         updateCubes(markers, now);
         liveSet = computeLiveSet();
+        updateMeasureBuffer();
         updateStability();
 
         drawScene(markers);
@@ -2590,7 +2816,7 @@ function cubeStateText(cube) {
 }
 
 function updateStatus(markers) {
-    const tracked = cubes.filter(cube => cube.frame);
+    const tracked = cubes.filter(cube => cube.confirmed && cube.frame);
 
     if (recorded) {
         const ref = recorded.ref;
@@ -2604,7 +2830,7 @@ function updateStatus(markers) {
     }
     else if (tracked.length >= 2) {
         setMessage(
-            tracked.length + " cubes suivis",
+            tracked.length + " / " + EXPECTED_CUBES + " cubes suivis",
             !autoEnabled
                 ? "Touchez « Enregistrer la position » quand le placement est bon."
                 : !autoArmed
@@ -2641,6 +2867,7 @@ function updateStatus(markers) {
     }
 
     for (const cube of cubes) {
+        if (!cube.confirmed || cube.number === 0) continue;
         let line =
             "<span style='color:" + cubeColor(cube) + ";font-weight:650'>Cube " + cube.number + "</span> : " +
             cubeStateText(cube);
@@ -2671,11 +2898,28 @@ function updateStatus(markers) {
         }
     }
 
-    if (recorded && recorded.spreadMm !== null) {
+    if (recorded && recorded.errorMm !== null) {
+        lines.push(
+            "<span class='ok'>Position retenue</span> : moyenne robuste de " + recorded.samples + " mesures" +
+            " • dispersion " + recorded.spreadMm.toFixed(3) + " mm / " + recorded.spreadDeg.toFixed(3) + "°" +
+            " • incertitude de la moyenne ≈ " + recorded.errorMm.toFixed(3) + " mm / " + recorded.errorDeg.toFixed(3) + "°"
+        );
+    }
+    else if (recorded && recorded.spreadMm !== null) {
         lines.push(
             "Dispersion à l'enregistrement : " +
-            recorded.spreadMm.toFixed(3) + " mm • " + recorded.spreadDeg.toFixed(3) + "°" +
-            " (moyenne de " + AUTO_WINDOW + " mesures)"
+            recorded.spreadMm.toFixed(3) + " mm • " + recorded.spreadDeg.toFixed(3) + "°"
+        );
+    }
+
+    if (!recorded) {
+        const precise = preciseEstimate();
+        lines.push(
+            precise
+                ? "Mesure précise : " + precise.samples + " mesures • incertitude ≈ " +
+                  precise.errorMm.toFixed(3) + " mm / " + precise.errorDeg.toFixed(3) + "°"
+                : "Mesure précise : " + measureBuffer.length + " / " + MEASURE_MIN_SAMPLES +
+                  " (les " + EXPECTED_CUBES + " cubes immobiles et visibles)"
         );
     }
 
@@ -2767,16 +3011,17 @@ function drawScene(markers) {
             }
         }
         for (const cube of cubes) {
-            if (!recorded.members.includes(cube) && cube.frame) drawSTL(cube, cube.frame);
+            if (!recorded.members.includes(cube) && cube.confirmed && cube.frame) drawSTL(cube, cube.frame);
         }
     }
     else {
         for (const cube of cubes) {
-            if (cube.frame) drawSTL(cube, cube.frame);
+            if (cube.confirmed && cube.frame) drawSTL(cube, cube.frame);
         }
     }
 
     for (const cube of cubes) {
+        if (!cube.confirmed || cube.number === 0) continue;
         if (cube.frame) {
             const top = drawCubeAxes(cube.frame, cube.edgeM * AXIS_LENGTH_RATIO);
             if (top) {
@@ -2923,6 +3168,7 @@ function stopCamera() {
     detectionRunning = false;
     liveSet = null;
     resetStability();
+    resetMeasure();
     cubes = [];
 
     clearOverlay();
@@ -2945,6 +3191,54 @@ function stopCamera() {
 /* ============================================================
    BOUTONS
 ============================================================ */
+
+/* STL ASCII (texte) : lecture des sommets. */
+function parseAsciiSTL(text) {
+    const values = [];
+    const re = /vertex\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)/g;
+    let m;
+    while ((m = re.exec(text))) values.push(Number(m[1]), Number(m[2]), Number(m[3]));
+    const count = Math.floor(values.length / 9);
+    if (!count) throw new Error("aucun triangle trouvé");
+    const vertsMm = new Float32Array(values.slice(0, count * 9));
+    return { count, vertsMm, view: makeViewMesh(simplifyForDisplay(vertsMm, count)) };
+}
+
+function parseAnySTL(buffer) {
+    const head = new TextDecoder("utf-8").decode(new Uint8Array(buffer, 0, Math.min(512, buffer.byteLength)));
+    const binarySize = buffer.byteLength >= 84 ? 84 + new DataView(buffer).getUint32(80, true) * 50 : -1;
+    if (/^\s*solid/i.test(head) && /facet/i.test(head) && binarySize !== buffer.byteLength) {
+        return parseAsciiSTL(new TextDecoder("utf-8").decode(new Uint8Array(buffer)));
+    }
+    return parseBinarySTL(buffer);
+}
+
+/* STL choisi par l'utilisateur : il remplace le STL de tous les cubes. */
+stlInput.addEventListener("change", async function() {
+    const file = stlInput.files && stlInput.files[0];
+    if (!file) return;
+    try {
+        const mesh = parseAnySTL(await file.arrayBuffer());
+        for (const template of templates) {
+            template.mesh = mesh;
+            template.stlName = file.name;
+            template.stlState =
+                mesh.count + " triangles" +
+                (mesh.view.count < mesh.count ? " (" + mesh.view.count + " affichés)" : "");
+        }
+        stlLabel.textContent = "STL : " + file.name;
+        if (recorded) {
+            recorded = null;
+            resetStability();
+        }
+        setMessage("STL chargé ✓", file.name + " — " + mesh.count + " triangles", "ok");
+    }
+    catch (error) {
+        setMessage("STL illisible", errorText(error), "error");
+    }
+    stlInput.value = "";
+    updateButtonsAndGrid();
+});
 
 startButton.addEventListener("click", startCamera);
 stopButton.addEventListener("click", stopCamera);
