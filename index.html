@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V10.4</title>
+<title>AprilTag iPad V10.5</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -405,7 +405,7 @@ body.mode-calib .scan-only, body:not(.mode-calib) .calib-only { display: none !i
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V10.4";
+const VERSION = "V10.5";
 
 /*
   MESURES D'IMPRESSION (V10.2)
@@ -4373,6 +4373,32 @@ function restartMeasure() {
     if (!stream) setMessage("Mesure effacée", "Démarrez la caméra pour une nouvelle mesure.");
 }
 
+/*
+  Bouton « Recommencer » : nouvelle acquisition complète.
+  Tout est remis à zéro (liaisons, suivi des cubes, netteté) et la
+  validation automatique est réarmée et remise sur « oui ».
+*/
+function restartAcquisition() {
+    recorded = null;
+    autoEnabled = true;
+    autoArmed = true;
+    signalReady = false;
+    resetMeasure();
+    resetStability();
+    cubes = [];
+    lastRefView = null;
+    blurHistory = [];
+    frameBlurry = false;
+    sceneCache = null;
+    updateButtonsAndGrid();
+    if (stream) {
+        setMessage("Nouvelle acquisition SCANTAG", "Validation automatique réarmée : balayez lentement les cubes.", "warning");
+    }
+    else {
+        setMessage("Mesure effacée", "Démarrez la caméra pour une nouvelle mesure.");
+    }
+}
+
 function updateButtonsAndGrid() {
     const sol = solveScene();
     const set = recorded || (sol.means.size ? sol : null);
@@ -4954,7 +4980,7 @@ for (const item of library) loadLibraryItem(item);
 renderStlList();
 stopButton.addEventListener("click", stopCamera);
 recordButton.addEventListener("click", toggleRecord);
-restartButton.addEventListener("click", restartMeasure);
+restartButton.addEventListener("click", restartAcquisition);
 autoButton.addEventListener("click", toggleAuto);
 window.addEventListener("pagehide", stopCamera);
 document.getElementById("calibStart").addEventListener("click", toggleCalibMode);
