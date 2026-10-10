@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V9.9</title>
+<title>AprilTag iPad V10.0</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -305,7 +305,7 @@ button:disabled { opacity: .32; }
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V9.9";
+const VERSION = "V10.0";
 
 const TAG_SIZE_M = 0.008;             // côté du carré noir du tag (sans la marge blanche)
 const CAMERA_HFOV_DEG = 65;
@@ -1051,10 +1051,15 @@ function configureCanvas() {
 
     /*
       Intrinsèques PROVISOIRES : Safari ne donne pas la calibration native.
-      On convertit un HFOV approximatif en focale pixels (pixels carrés).
+      On convertit un angle de vue approximatif en focale pixels (pixels carrés).
+
+      L'angle de vue de la caméra (≈ 65°) correspond au GRAND côté de l'image.
+      iPad tenu en portrait, la vidéo est verticale : le grand côté est la hauteur.
+      (Avant la V10.0, l'angle était appliqué à la largeur, donc au petit côté en
+      portrait : la focale était sous-estimée d'environ 45 %.)
     */
     const hfovRad = CAMERA_HFOV_DEG * Math.PI / 180;
-    const fx = (analysis.width / 2) / Math.tan(hfovRad / 2);
+    const fx = (Math.max(analysis.width, analysis.height) / 2) / Math.tan(hfovRad / 2);
     const fy = fx;
     const cx = analysis.width / 2;
     const cy = analysis.height / 2;
@@ -1770,7 +1775,7 @@ function focalReady() {
 
 function currentHfovDeg() {
     if (!cameraModel || !analysis.width) return CAMERA_HFOV_DEG;
-    return 2 * Math.atan((analysis.width / 2) / cameraModel.fx) * 180 / Math.PI;
+    return 2 * Math.atan((Math.max(analysis.width, analysis.height) / 2) / cameraModel.fx) * 180 / Math.PI;
 }
 
 /* Orientation de chaque tag dans le repère du cube, mémorisée quand la pose est sûre,
@@ -3463,7 +3468,8 @@ function updateStatus(markers) {
     lines.push(
         !FOCAL_AUTO
             ? "<span class='warning'>Focale supposée, non calibrée : angle de vue " + currentHfovDeg().toFixed(1) +
-              "°. Une erreur de focale fausse surtout les écarts en profondeur.</span>"
+              "° sur le grand côté de l'image (focale " + (cameraModel ? cameraModel.fx.toFixed(0) : "—") +
+              " px). Une erreur de focale fausse surtout les écarts en profondeur.</span>"
             : focalReady()
             ? "<span class='ok'>Focale calibrée</span> : angle de vue " + currentHfovDeg().toFixed(1) +
               "° (correction " + ((focalScale - 1) * 100).toFixed(1) + " %, " + focalSamples.length + " estimations)"
