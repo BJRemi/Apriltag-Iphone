@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V8.9</title>
+<title>AprilTag iPad V9.0</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -149,6 +149,8 @@ button:disabled { opacity: .32; }
 .export.main { flex: 2; }
 .export.main:not(:disabled) { background: var(--text); color: var(--bg); border-color: transparent; }
 
+.grid-caption { margin: 14px 4px 0; font-size: 12px; color: var(--muted); }
+
 .hidden { display: none; }
 
 .pose-grid {
@@ -220,17 +222,16 @@ button:disabled { opacity: .32; }
 
     <div class="buttons">
         <button id="exportAll" class="export main" disabled>Exporter les STL (1 par cube)</button>
-        <button id="exportA" class="export" disabled>A seul</button>
-        <button id="exportB" class="export" disabled>B seul</button>
     </div>
 
+    <div id="gridCaption" class="grid-caption"></div>
     <div class="pose-grid">
-        <div class="pose-box"><div class="pose-label">ΔX B / A</div><div id="relX" class="pose-value">—</div></div>
-        <div class="pose-box"><div class="pose-label">ΔY B / A</div><div id="relY" class="pose-value">—</div></div>
-        <div class="pose-box"><div class="pose-label">ΔZ B / A</div><div id="relZ" class="pose-value">—</div></div>
-        <div class="pose-box"><div class="pose-label">Roll B / A</div><div id="relRoll" class="pose-value">—</div></div>
-        <div class="pose-box"><div class="pose-label">Pitch B / A</div><div id="relPitch" class="pose-value">—</div></div>
-        <div class="pose-box"><div class="pose-label">Yaw B / A</div><div id="relYaw" class="pose-value">—</div></div>
+        <div class="pose-box"><div class="pose-label">ΔX</div><div id="relX" class="pose-value">—</div></div>
+        <div class="pose-box"><div class="pose-label">ΔY</div><div id="relY" class="pose-value">—</div></div>
+        <div class="pose-box"><div class="pose-label">ΔZ</div><div id="relZ" class="pose-value">—</div></div>
+        <div class="pose-box"><div class="pose-label">Roll</div><div id="relRoll" class="pose-value">—</div></div>
+        <div class="pose-box"><div class="pose-label">Pitch</div><div id="relPitch" class="pose-value">—</div></div>
+        <div class="pose-box"><div class="pose-label">Yaw</div><div id="relYaw" class="pose-value">—</div></div>
     </div>
 
     <div id="diagnostic" class="info"></div>
@@ -251,7 +252,7 @@ button:disabled { opacity: .32; }
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V8.9";
+const VERSION = "V9.0";
 
 const TAG_SIZE_M = 0.008;             // côté du carré noir du tag (sans la marge blanche)
 const CAMERA_HFOV_DEG = 65;
@@ -306,20 +307,20 @@ const AXIS_LENGTH_RATIO = 1.5;        // longueur des axes dessinés, en fractio
 const OVERLAY_MAX_SCALE = 2;
 
 /*
-  LES DEUX CUBES
+  CUBES
 
-  Pour chaque cube :
-  - faces    : ID du tag sur la face +X, +Y et +Z du repère du cube
-               (une face sans tag est simplement omise) ;
-  - dots     : face portant la grille de 3 × 3 points (normale dans le
-               repère du cube, pas et diamètre des points) ;
-  - edgeM    : arête du cube en mètres ;
-  - stlName  : fichier STL (binaire, en mm) placé à côté de index.html ;
-  - stlOffsetM : position de l'origine du STL dans le repère du cube.
-                 Les axes du STL sont alignés sur ceux du cube.
+  Tous les cubes sont identiques : mêmes tags, même face à points,
+  même STL. L'application les distingue par leur position dans l'espace
+  et les numérote 1, 2, 3… (jusqu'à MAX_CUBES). Le cube 1 sert de
+  référence pour l'enregistrement et l'export.
 
-  Le cube A sert de référence : à l'export, le STL A reste inchangé
-  et le STL B est replacé dans le système de coordonnées du STL A.
+  Modèle de cube :
+  - faces      : ID du tag sur la face +X, +Y et +Z du repère du cube
+                 (une face sans tag est simplement omise) ;
+  - dots       : face portant la grille de 3 × 3 points ;
+  - edgeM      : arête du cube en mètres ;
+  - stlName    : fichier STL (binaire, en mm) placé à côté de index.html ;
+  - stlOffsetM : origine du STL dans le repère du cube (axes alignés).
 */
 /* Face à points : 3 × 3 points Ø 1,2 mm, pas 10/3 mm, centrés sur la face −Y. */
 const DOT_FACE = { normal: [0, -1, 0], pitchM: 0.010 / 3, diameterM: 0.0012 };
@@ -330,26 +331,26 @@ const DOT_MIN_CONTRAST = 25;         // écart de gris minimal entre point et fo
 const DOT_PIXEL_OFFSET = 0.5;        // centre du pixel (i, j) = (i + 0,5 ; j + 0,5)
 const DOT_WEIGHT = 9;                // un centre de point est ~3 fois plus précis qu'un coin de tag
 
-const CUBE_CONFIGS = [
+const CUBE_TEMPLATES = [
     {
-        key: "A",
         faces: { xPlus: 2, zPlus: 7 },       // +X vers ID 2 (droite), +Z vers ID 7 (dessus)
-        dots: DOT_FACE,                      // −Y : face à points (à la place de l'ancien ID 4)
-        /* Ancien cube à 3 tags : faces: { xPlus: 2, yPlus: 4, zPlus: 7 }, ySign: -1, sans dots */
+        dots: DOT_FACE,                      // −Y : face à points
         edgeM: 0.010,
         stlName: "IOC-A.stl",
-        stlOffsetM: [0, 0, -0.010],
-        color: [125, 211, 252]
-    },
-    {
-        key: "B",
-        faces: { xPlus: 12, zPlus: 17 },
-        dots: DOT_FACE,
-        edgeM: 0.010,
-        stlName: "IOC-A.stl",             // à remplacer si le cube B porte un autre STL
-        stlOffsetM: [0, 0, -0.010],
-        color: [253, 186, 116]
+        stlOffsetM: [0, 0, -0.010]
     }
+    /* Ancien cube à 3 tags (à utiliser à la place, pas en même temps) :
+       { faces: { xPlus: 2, yPlus: 4, zPlus: 7 }, ySign: -1, edgeM: 0.010,
+         stlName: "IOC-A.stl", stlOffsetM: [0, 0, -0.010] } */
+];
+
+const MAX_CUBES = 6;
+const CLUSTER_RADIUS_RATIO = 0.6;    // tags d'un même cube : centres estimés à moins de 0,6 arête
+const TRACK_RADIUS_RATIO = 2.5;      // suivi d'une image à l'autre : déplacement maximal en arêtes
+const CUBE_FORGET_MS = 2000;         // cube oublié après 2 s sans être vu
+const CUBE_COLORS = [
+    [125, 211, 252], [253, 186, 116], [134, 239, 172],
+    [249, 168, 212], [196, 181, 253], [253, 224, 71]
 ];
 
 
@@ -369,8 +370,7 @@ const stopButton = document.getElementById("stop");
 const recordButton = document.getElementById("record");
 const autoButton = document.getElementById("auto");
 const exportAllButton = document.getElementById("exportAll");
-const exportAButton = document.getElementById("exportA");
-const exportBButton = document.getElementById("exportB");
+const gridCaption = document.getElementById("gridCaption");
 
 const statusEl = document.getElementById("status");
 const detailEl = document.getElementById("detail");
@@ -389,7 +389,7 @@ document.getElementById("version").textContent =
     VERSION;
 
 diagnostic.innerHTML =
-    VERSION + " prête.<br>Suivi de deux cubes AprilTag avec STL liés.";
+    VERSION + " prête.<br>Suivi de cubes identiques (jusqu'à " + MAX_CUBES + "), un STL par cube.";
 
 
 /* ============================================================
@@ -405,46 +405,25 @@ let detectionRunning = false;
 let cameraModel = null;
 let overlayScale = 1;
 
-/* Position relative enregistrée (B dans le repère du cube A), ou null. */
+/*
+  Position enregistrée, ou null :
+  { ref: cube de référence, members: cubes concernés,
+    rels: Map(cube -> position par rapport à la référence), ... }
+*/
 let recorded = null;
-let lastLiveRel = null;
+
+/* Positions relatives en direct : { ref, rels: Map(cube -> position relative) }, ou null. */
+let liveSet = null;
 
 /* Validation automatique */
 let autoEnabled = true;
 let autoArmed = true;        // désarmée après une libération, jusqu'au prochain mouvement
 let relBuffer = [];
+let bufferKey = "";          // liste des cubes présents dans la fenêtre de mesure
 let stability = null;        // statistiques de la fenêtre courante
 let bestWindow = null;
 let stableCount = 0;
 let sinceBest = 0;
-
-function makeCube(config) {
-    return {
-        ...config,
-        ids: new Set(
-            [config.faces.xPlus, config.faces.yPlus, config.faces.zPlus]
-                .filter(id => id !== undefined)
-        ),
-        tagCorners: buildTagCorners(config),
-        dotPoints: config.dots ? buildDotPoints(config.dots, config.edgeM) : null,
-        tagRot: {},                 // orientation de chaque tag dans le cube, apprise en cours de suivi
-        fit: null,
-        ySign: config.ySign || 1,   // sens de la face Y, vérifié quand 3 faces sont visibles
-        mesh: null,
-        palette: null,
-        stlState: "non chargé",
-        smoothedCenter: null,
-        lastRawCenter: null,
-        stabilityMm: null,
-        smoothedFrame: null,
-        lastGood: null,
-        estimate: null,
-        center: null,
-        frame: null,
-        held: false,
-        visibleIds: []
-    };
-}
 
 /* Base (a, b) du plan d'une face de normale n (axe du cube). */
 function faceBasis(n) {
@@ -488,13 +467,56 @@ function buildDotPoints(dots, edgeM) {
     return points;
 }
 
-const cubes = CUBE_CONFIGS.map(makeCube);
-const cubeA = cubes[0];
-const cubeB = cubes[1];
+/* Modèles de cubes (géométrie, tags, STL), partagés par tous les cubes identiques. */
+const templates = CUBE_TEMPLATES.map(config => ({
+    ...config,
+    ids: new Set(
+        [config.faces.xPlus, config.faces.yPlus, config.faces.zPlus]
+            .filter(id => id !== undefined)
+    ),
+    tagCorners: buildTagCorners(config),
+    dotPoints: config.dots ? buildDotPoints(config.dots, config.edgeM) : null,
+    tagRot: {},                 // orientation de chaque tag dans le cube, apprise en cours de suivi
+    mesh: null,
+    stlState: "non chargé"
+}));
 
-const cubeByTagId = new Map();
-for (const cube of cubes) {
-    for (const id of cube.ids) cubeByTagId.set(id, cube);
+const templateByTagId = new Map();
+for (const template of templates) {
+    for (const id of template.ids) templateByTagId.set(id, template);
+}
+
+/* Cubes physiques actuellement suivis, numérotés 1, 2, 3… */
+let cubes = [];
+
+function makeCube(template) {
+    const used = new Set(cubes.map(c => c.number));
+    if (recorded) for (const c of recorded.members) used.add(c.number);
+    let number = 1;
+    while (used.has(number)) number++;
+
+    return {
+        ...template,
+        template,
+        number,
+        key: String(number),
+        color: CUBE_COLORS[(number - 1) % CUBE_COLORS.length],
+        palette: null,
+        ySign: template.ySign || 1,
+        lastSeen: 0,
+        lastCenter: null,
+        smoothedCenter: null,
+        lastRawCenter: null,
+        stabilityMm: null,
+        smoothedFrame: null,
+        lastGood: null,
+        estimate: null,
+        center: null,
+        frame: null,
+        held: false,
+        fit: null,
+        visibleIds: []
+    };
 }
 
 function resetCubeTracking(cube) {
@@ -815,7 +837,7 @@ async function startCamera() {
         await loadAprilTag();
 
         /* Les STL se chargent en parallèle : la caméra n'en dépend pas. */
-        for (const cube of cubes) loadCubeSTL(cube);
+        for (const template of templates) loadTemplateSTL(template);
 
         setMessage("Ouverture caméra…", "Activation de la caméra arrière.", "warning");
 
@@ -900,7 +922,7 @@ function configureCanvas() {
     cameraModel = { fx, fy, cx, cy, videoWidth: width, videoHeight: height };
     detector.setCameraInfo(fx, fy, cx, cy);
 
-    for (const cube of cubes) resetCubeTracking(cube);
+    cubes = [];
 }
 
 
@@ -1121,14 +1143,19 @@ function updateCube(cube, markers, now) {
             frameFromSingleTag(cube, markers);
 
         /* Affinage sur tous les points connus : coins des tags + centres des points. */
+        let fit = null;
         if (rawFrame) {
-            const fit = refinePose(cube, markers, { origin, ...rawFrame });
-            if (fit && fit.rms <= FIT_MAX_RMS_PX) {
-                cube.fit = fit;
-                origin = fit.origin;
-                rawFrame = { x: fit.x, y: fit.y, z: fit.z };
-                learnTagRotations(cube, markers, fit);
-            }
+            fit = refinePose(cube, markers, { origin, ...rawFrame });
+        }
+        else {
+            /* Un seul tag, orientation encore inconnue : les points lèvent l'ambiguïté. */
+            fit = solveSingleTagWithDots(cube, markers, origin);
+        }
+        if (fit && fit.rms <= FIT_MAX_RMS_PX) {
+            cube.fit = fit;
+            origin = fit.origin;
+            rawFrame = { x: fit.x, y: fit.y, z: fit.z };
+            learnTagRotations(cube, markers, fit);
         }
 
         cube.center = [...updateSmoothedCenter(cube, origin)];
@@ -1478,6 +1505,50 @@ function refinePose(cube, markers, init) {
     };
 }
 
+/*
+  Un seul tag visible et orientation pas encore apprise : la normale de la face
+  est connue, mais le tag peut être tourné de 0, 90, 180 ou 270° sur sa face.
+  On essaie les quatre ; la bonne est celle où les points apparaissent là où
+  le calcul les attend. Sans points lisibles, on ne tranche pas.
+*/
+function solveSingleTagWithDots(cube, markers, center) {
+    if (!cube.dotPoints) return null;
+    let best = null;
+
+    for (const marker of markers) {
+        const id = Number(marker.id);
+        const known = cube.tagCorners[id];
+        const axes = poseAxes(marker);
+        const t = markerPosition(marker);
+        if (!known || !axes || !t) continue;
+
+        /* Normale de la face dans le repère du cube, et dans l'image (tournée vers la caméra). */
+        const faceCenter = vecScale(vecAdd(vecAdd(known[0], known[1]), vecAdd(known[2], known[3])), 0.25);
+        const n = vecNormalize(faceCenter);
+        let N = axes.z;
+        if (vecDot(N, t) > 0) N = vecScale(N, -1);
+        const { a, b } = faceBasis(n);
+
+        for (let k = 0; k < 4; k++) {
+            const angle = k * Math.PI / 2;
+            const aCam = vecAdd(vecScale(axes.x, Math.cos(angle)), vecScale(vecCross(N, axes.x), Math.sin(angle)));
+            const bCam = vecCross(N, aCam);
+            const axis = j => vecAdd(vecAdd(vecScale(N, n[j]), vecScale(aCam, a[j])), vecScale(bCam, b[j]));
+            const x = vecNormalize(axis(0));
+            const z = orthoNormalize(axis(2), x);
+            if (!z) continue;
+
+            const fit = refinePose(cube, [marker], { origin: center, x, y: vecCross(z, x), z });
+            if (!fit || fit.dots.length < 5) continue;
+            if (!best || fit.dots.length > best.dots.length ||
+                (fit.dots.length === best.dots.length && fit.rms < best.rms)) {
+                best = fit;
+            }
+        }
+    }
+    return best;
+}
+
 /* Orientation de chaque tag dans le repère du cube, mémorisée quand la pose est sûre,
    pour pouvoir suivre le cube avec un seul tag visible. */
 function learnTagRotations(cube, markers, fit) {
@@ -1512,10 +1583,128 @@ function frameFromSingleTag(cube, markers) {
 
 
 /* ============================================================
-   POSITION RELATIVE DE B PAR RAPPORT À A
+   REGROUPEMENT DES TAGS PAR CUBE
 
-   rel.x, rel.y, rel.z : axes du cube B exprimés dans le repère du cube A
-   rel.t               : centre du cube B dans le repère du cube A (mètres)
+   Tous les cubes peuvent porter les mêmes tags : on ne peut donc pas
+   les distinguer par leurs ID. Chaque tag donne une estimation du
+   centre de son cube ; les tags dont les centres se rejoignent
+   (à moins de 0,6 arête) appartiennent au même cube. Un même ID ne
+   peut apparaître qu'une fois par cube.
+
+   D'une image à l'autre, chaque groupe est rattaché au cube suivi le
+   plus proche ; un groupe sans cube proche crée un nouveau cube.
+============================================================ */
+
+function groupMarkers(markers) {
+    const groups = [];
+
+    for (const marker of markers) {
+        const template = templateByTagId.get(Number(marker.id));
+        if (!template) continue;
+
+        const t = markerPosition(marker);
+        const axes = poseAxes(marker);
+        if (!t || !axes) continue;
+
+        const half = template.edgeM / 2;
+        const a = vecAdd(t, vecScale(axes.z, half));
+        const b = vecSub(t, vecScale(axes.z, half));
+        const center = a[2] >= b[2] ? a : b;
+
+        let best = null;
+        let bestDistance = Infinity;
+        for (const group of groups) {
+            if (group.template !== template) continue;
+            if (group.markers.some(m => Number(m.id) === Number(marker.id))) continue;
+            const d = vecLength(vecSub(group.center, center));
+            if (d < bestDistance) {
+                bestDistance = d;
+                best = group;
+            }
+        }
+
+        if (best && bestDistance <= template.edgeM * CLUSTER_RADIUS_RATIO) {
+            best.markers.push(marker);
+            best.points.push(center);
+            best.center = vecScale(best.points.reduce(vecAdd, [0, 0, 0]), 1 / best.points.length);
+        }
+        else {
+            groups.push({ template, markers: [marker], points: [center], center });
+        }
+    }
+
+    return groups;
+}
+
+function updateCubes(markers, now) {
+    const groups = groupMarkers(markers);
+
+    /* Rattachement groupe -> cube suivi, du plus proche au plus éloigné. */
+    const pairs = [];
+    groups.forEach((group, gi) => {
+        cubes.forEach((cube, ci) => {
+            if (cube.template !== group.template || !cube.lastCenter) return;
+            const d = vecLength(vecSub(cube.lastCenter, group.center));
+            if (d <= group.template.edgeM * TRACK_RADIUS_RATIO) pairs.push({ gi, ci, d });
+        });
+    });
+    pairs.sort((p, q) => p.d - q.d);
+
+    const usedGroups = new Set();
+    const usedCubes = new Set();
+    const assignment = new Map();
+
+    for (const p of pairs) {
+        if (usedGroups.has(p.gi) || usedCubes.has(p.ci)) continue;
+        usedGroups.add(p.gi);
+        usedCubes.add(p.ci);
+        assignment.set(cubes[p.ci], groups[p.gi]);
+    }
+
+    groups.forEach((group, gi) => {
+        if (usedGroups.has(gi) || cubes.length >= MAX_CUBES) return;
+        const cube = makeCube(group.template);
+        cubes.push(cube);
+        assignment.set(cube, group);
+    });
+
+    cubes.sort((p, q) => p.number - q.number);
+
+    for (const cube of cubes) {
+        const group = assignment.get(cube);
+        const own = group ? group.markers : [];
+        for (const marker of own) marker._cube = cube;
+
+        updateCube(cube, own, now);
+
+        if (group) {
+            cube.lastSeen = now;
+            if (cube.center) cube.lastCenter = [...cube.center];
+        }
+    }
+
+    /* Cubes disparus depuis un moment : oubliés, sauf s'ils font partie d'une position enregistrée. */
+    const keep = new Set(recorded ? recorded.members : []);
+    cubes = cubes.filter(cube => keep.has(cube) || now - cube.lastSeen <= CUBE_FORGET_MS);
+}
+
+/* Positions relatives en direct, par rapport au cube de plus petit numéro. */
+function computeLiveSet() {
+    const tracked = cubes.filter(cube => cube.frame && !cube.held);
+    if (tracked.length < 2) return null;
+
+    const ref = tracked[0];
+    const rels = new Map();
+    for (const cube of tracked.slice(1)) rels.set(cube, relativePose(ref.frame, cube.frame));
+    return { ref, rels };
+}
+
+
+/* ============================================================
+   POSITION RELATIVE ENTRE CUBES
+
+   rel.x, rel.y, rel.z : axes d'un cube exprimés dans le repère du cube de référence
+   rel.t               : centre du cube dans le repère du cube de référence (mètres)
 ============================================================ */
 
 function relativePose(frameA, frameB) {
@@ -1742,21 +1931,21 @@ function loadMesh(name) {
     return promise;
 }
 
-async function loadCubeSTL(cube) {
-    if (cube.mesh) return;
-    cube.stlState = "chargement…";
+async function loadTemplateSTL(template) {
+    if (template.mesh) return;
+    template.stlState = "chargement…";
     try {
-        cube.mesh = await loadMesh(cube.stlName);
-        cube.stlState =
-            cube.mesh.count + " triangles" +
-            (cube.mesh.view.count < cube.mesh.count
-                ? " (" + cube.mesh.view.count + " affichés)"
+        template.mesh = await loadMesh(template.stlName);
+        template.stlState =
+            template.mesh.count + " triangles" +
+            (template.mesh.view.count < template.mesh.count
+                ? " (" + template.mesh.view.count + " affichés)"
                 : "");
     }
     catch (error) {
-        console.error("Chargement STL " + cube.key + " :", error);
-        cube.mesh = null;
-        cube.stlState = "ERREUR — " + errorText(error);
+        console.error("Chargement STL :", error);
+        template.mesh = null;
+        template.stlState = "ERREUR — " + errorText(error);
     }
     updateButtonsAndGrid();
 }
@@ -1788,8 +1977,8 @@ function stlPalette(cube) {
 }
 
 function drawSTL(cube, frame) {
-    if (!cube.mesh || !frame || !cameraModel || !overlay.width) return;
-    const mesh = cube.mesh.view;
+    if (!cube.template.mesh || !frame || !cameraModel || !overlay.width) return;
+    const mesh = cube.template.mesh.view;
 
     if (!stlLayer) {
         stlLayer = document.createElement("canvas");
@@ -1912,10 +2101,10 @@ function drawSTL(cube, frame) {
 /* ============================================================
    STL : EXPORT
 
-   Les deux fichiers exportés partagent le système de coordonnées
-   du STL A :
-   - STL A : inchangé ;
-   - STL B : sommets déplacés selon la position relative enregistrée.
+   Tous les fichiers exportés partagent le système de coordonnées
+   du STL du cube de référence :
+   - cube de référence : STL inchangé ;
+   - autres cubes : sommets déplacés selon la position enregistrée.
 ============================================================ */
 
 /* parts : liste de [mesh, transform ou null] réunis dans un seul fichier. */
@@ -1963,22 +2152,22 @@ function buildBinarySTL(parts, headerText) {
     return buffer;
 }
 
-/* Sommet du STL B (mm) -> coordonnées du STL A (mm). */
-function makeBToATransform(rel) {
+/* Sommet du STL d'un cube (mm) -> coordonnées du STL du cube de référence (mm). */
+function makeToRefTransform(rel, offsetSelfM, offsetRefM) {
     const tMm = vecScale(rel.t, 1000);
-    const offsetA = vecScale(cubeA.stlOffsetM, 1000);
-    const offsetB = vecScale(cubeB.stlOffsetM, 1000);
+    const offsetRef = vecScale(offsetRefM, 1000);
+    const offsetSelf = vecScale(offsetSelfM, 1000);
 
     return function(vertex) {
-        const q = vecAdd(offsetB, vertex);                 // repère du cube B
-        const inCubeA = vecAdd(
+        const q = vecAdd(offsetSelf, vertex);              // repère du cube
+        const inRef = vecAdd(
             tMm,
             vecAdd(
                 vecAdd(vecScale(rel.x, q[0]), vecScale(rel.y, q[1])),
                 vecScale(rel.z, q[2])
             )
         );
-        return vecSub(inCubeA, offsetA);                   // repère du STL A
+        return vecSub(inRef, offsetRef);                   // repère du STL de référence
     };
 }
 
@@ -1994,58 +2183,25 @@ function downloadBuffer(buffer, fileName) {
     setTimeout(() => URL.revokeObjectURL(url), 15000);
 }
 
-function exportCube(cube) {
-    if (!recorded) {
-        setMessage("Export impossible", "Enregistrez d'abord la position.", "warning");
-        return;
-    }
-    if (!cube.mesh) {
-        setMessage("Export impossible", "Le STL " + cube.key + " n'est pas chargé.", "error");
-        return;
-    }
-
-    const base = cube.stlName.replace(/\.stl$/i, "");
-    let buffer;
-    let fileName;
-
-    if (cube === cubeA) {
-        buffer = buildBinarySTL([[cube.mesh, null]], "AprilTag " + VERSION + " STL A reference");
-        fileName = base + "_A_reference.stl";
-    }
-    else {
-        buffer = buildBinarySTL(
-            [[cube.mesh, makeBToATransform(recorded.rel)]],
-            "AprilTag " + VERSION + " STL B positionne par rapport a A"
-        );
-        fileName = base + "_B_positionne.stl";
-    }
-
-    downloadBuffer(buffer, fileName);
-    setMessage("Export STL " + cube.key + " ✓", fileName, "ok");
-}
-
-
 /*
   EXPORT « UN CUBE = UN STL »
 
-  Chaque cube donne son propre fichier STL, tous dans le système de
-  coordonnées du STL A : importés ensemble dans Blender ou un logiciel
-  dentaire, ils arrivent déjà placés, mais restent des objets séparés.
-
-  Sur iPad, les fichiers passent par la feuille de partage
-  (« Enregistrer dans Fichiers »). Sinon, ils sont téléchargés
-  dans une archive ZIP qui contient un STL par cube.
+  Chaque cube enregistré donne son propre fichier STL, tous dans le
+  système de coordonnées du STL du cube de référence (cube 1) :
+  importés ensemble, ils arrivent déjà placés, en objets séparés.
 */
-
 function cubeExportFiles() {
-    return cubes.map(cube => {
-        const base = cube.stlName.replace(/\.stl$/i, "");
-        const transform = cube === cubeA ? null : makeBToATransform(recorded.rel);
+    const ref = recorded.ref;
+    return recorded.members.map(cube => {
+        const base = cube.template.stlName.replace(/\.stl$/i, "");
+        const transform = cube === ref
+            ? null
+            : makeToRefTransform(recorded.rels.get(cube), cube.stlOffsetM, ref.stlOffsetM);
         return {
-            name: base + "_cube_" + cube.key + ".stl",
+            name: base + "_cube_" + cube.number + ".stl",
             data: new Uint8Array(buildBinarySTL(
-                [[cube.mesh, transform]],
-                "AprilTag " + VERSION + " cube " + cube.key
+                [[cube.template.mesh, transform]],
+                "AprilTag " + VERSION + " cube " + cube.number
             ))
         };
     });
@@ -2131,7 +2287,7 @@ function makeZip(files) {
 }
 
 function exportAll() {
-    if (!recorded || cubes.some(cube => !cube.mesh)) {
+    if (!recorded || recorded.members.some(cube => !cube.template.mesh)) {
         setMessage("Export impossible", "Il faut une position enregistrée et tous les STL chargés.", "warning");
         return;
     }
@@ -2216,6 +2372,7 @@ function windowStats(samples) {
 
 function resetStability() {
     relBuffer = [];
+    bufferKey = "";
     stability = null;
     bestWindow = null;
     stableCount = 0;
@@ -2224,7 +2381,9 @@ function resetStability() {
 
 function lockPosition(stats, auto) {
     recorded = {
-        rel: stats.mean,
+        ref: stats.ref,
+        members: stats.members,
+        rels: stats.means,
         spreadMm: stats.spreadMm,
         spreadDeg: stats.spreadDeg,
         auto
@@ -2236,32 +2395,51 @@ function lockPosition(stats, auto) {
 function updateStability() {
     if (recorded) return;
 
-    const fresh = lastLiveRel && !cubeA.held && !cubeB.held;
-    if (!fresh) {
+    if (!liveSet) {
         resetStability();
         return;
     }
 
-    relBuffer.push(lastLiveRel);
+    /* La fenêtre ne mélange pas des ensembles de cubes différents. */
+    const others = [...liveSet.rels.keys()];
+    const key = [liveSet.ref, ...others].map(c => c.number).join(",");
+    if (key !== bufferKey) {
+        resetStability();
+        bufferKey = key;
+    }
+
+    relBuffer.push(liveSet);
     if (relBuffer.length > AUTO_WINDOW) relBuffer.shift();
     if (relBuffer.length < AUTO_WINDOW) {
         stability = null;
         return;
     }
 
-    const stats = windowStats(relBuffer);
-    stability = stats;
-    if (!stats) return;
+    /* Statistiques de chaque cube ; la dispersion retenue est celle du moins stable. */
+    const means = new Map();
+    let spreadMm = 0, spreadDeg = 0, score = 0;
+    for (const cube of others) {
+        const st = windowStats(relBuffer.map(sample => sample.rels.get(cube)));
+        if (!st) {
+            stability = null;
+            return;
+        }
+        means.set(cube, st.mean);
+        spreadMm = Math.max(spreadMm, st.spreadMm);
+        spreadDeg = Math.max(spreadDeg, st.spreadDeg);
+        score = Math.max(score, st.score);
+    }
 
-    const stable =
-        stats.spreadMm <= AUTO_MAX_SPREAD_MM &&
-        stats.spreadDeg <= AUTO_MAX_SPREAD_DEG;
+    const stats = { ref: liveSet.ref, members: [liveSet.ref, ...others], means, spreadMm, spreadDeg, score };
+    stability = stats;
+
+    const stable = spreadMm <= AUTO_MAX_SPREAD_MM && spreadDeg <= AUTO_MAX_SPREAD_DEG;
 
     if (!stable) {
         bestWindow = null;
         stableCount = 0;
         sinceBest = 0;
-        if (stats.score > 4) autoArmed = true;     // les cubes ont bougé : on réarme
+        if (score > 4) autoArmed = true;     // les cubes ont bougé : on réarme
         return;
     }
 
@@ -2307,9 +2485,11 @@ function toggleRecord() {
         /* Moyenne des dernières mesures, plus fiable qu'une seule image. */
         lockPosition(stability, false);
     }
-    else if (cubeA.frame && cubeB.frame) {
+    else if (liveSet) {
         recorded = {
-            rel: relativePose(cubeA.frame, cubeB.frame),
+            ref: liveSet.ref,
+            members: [liveSet.ref, ...liveSet.rels.keys()],
+            rels: liveSet.rels,
             spreadMm: null,
             spreadDeg: null,
             auto: false
@@ -2320,31 +2500,35 @@ function toggleRecord() {
 }
 
 function updateButtonsAndGrid() {
-    const shown = recorded ? recorded.rel : lastLiveRel;
+    const set = recorded || liveSet;
+    const first = set ? [...set.rels.keys()][0] : null;
+    const shown = first ? set.rels.get(first) : null;
 
     if (shown) {
+        gridCaption.textContent =
+            "Cube " + first.number + " par rapport au cube " + set.ref.number +
+            (set.rels.size > 1 ? " — les autres cubes sont détaillés plus bas" : "");
         const euler = eulerDegrees(shown);
-        relEls.x.textContent = (shown.t[0] * 1000).toFixed(1) + " mm";
-        relEls.y.textContent = (shown.t[1] * 1000).toFixed(1) + " mm";
-        relEls.z.textContent = (shown.t[2] * 1000).toFixed(1) + " mm";
-        relEls.roll.textContent = euler.roll.toFixed(1) + "°";
-        relEls.pitch.textContent = euler.pitch.toFixed(1) + "°";
-        relEls.yaw.textContent = euler.yaw.toFixed(1) + "°";
+        relEls.x.textContent = (shown.t[0] * 1000).toFixed(2) + " mm";
+        relEls.y.textContent = (shown.t[1] * 1000).toFixed(2) + " mm";
+        relEls.z.textContent = (shown.t[2] * 1000).toFixed(2) + " mm";
+        relEls.roll.textContent = euler.roll.toFixed(2) + "°";
+        relEls.pitch.textContent = euler.pitch.toFixed(2) + "°";
+        relEls.yaw.textContent = euler.yaw.toFixed(2) + "°";
     }
     else {
+        gridCaption.textContent = "Position relative : il faut au moins 2 cubes suivis";
         for (const key in relEls) relEls[key].textContent = "—";
     }
 
     recordButton.textContent = recorded ? "Libérer la position" : "Enregistrer la position";
     recordButton.className = recorded ? "record locked" : "record";
-    recordButton.disabled = !recorded && !lastLiveRel;
+    recordButton.disabled = !recorded && !liveSet;
 
     autoButton.textContent = "Validation auto : " + (autoEnabled ? "oui" : "non");
     autoButton.className = autoEnabled ? "auto on" : "auto";
 
-    exportAllButton.disabled = !recorded || !cubeA.mesh || !cubeB.mesh;
-    exportAButton.disabled = !recorded || !cubeA.mesh;
-    exportBButton.disabled = !recorded || !cubeB.mesh;
+    exportAllButton.disabled = !recorded || recorded.members.some(cube => !cube.template.mesh);
 }
 
 
@@ -2370,12 +2554,8 @@ async function scanFrame(timestamp) {
         const markers = (await detector.detect(grayBuffer, analysis.width, analysis.height)) || [];
         const now = performance.now();
 
-        for (const cube of cubes) updateCube(cube, markers, now);
-
-        lastLiveRel = (cubeA.frame && cubeB.frame)
-            ? relativePose(cubeA.frame, cubeB.frame)
-            : null;
-
+        updateCubes(markers, now);
+        liveSet = computeLiveSet();
         updateStability();
 
         drawScene(markers);
@@ -2406,48 +2586,42 @@ function cubeStateText(cube) {
         return "1 seul tag : montrez une fois les 2 tags ensemble";
     }
     if (cube.visibleIds.length > 1) return "pose incomplète";
-    return "aucun tag visible";
+    return "hors champ";
 }
 
 function updateStatus(markers) {
-    const a = !!cubeA.frame;
-    const b = !!cubeB.frame;
+    const tracked = cubes.filter(cube => cube.frame);
 
     if (recorded) {
+        const ref = recorded.ref;
         setMessage(
             recorded.auto ? "Position validée automatiquement" : "Position enregistrée",
-            a ? "STL B fixé par rapport au cube A. Vous pouvez exporter."
-              : "Présentez le cube A pour revoir les deux STL. Vous pouvez exporter.",
+            ref.frame
+                ? recorded.members.length + " STL fixés par rapport au cube " + ref.number + ". Vous pouvez exporter."
+                : "Présentez le cube " + ref.number + " pour revoir les STL. Vous pouvez exporter.",
             "ok"
         );
     }
-    else if (a && b) {
+    else if (tracked.length >= 2) {
         setMessage(
-            "2 cubes suivis",
+            tracked.length + " cubes suivis",
             !autoEnabled
                 ? "Touchez « Enregistrer la position » quand le placement est bon."
                 : !autoArmed
                     ? "Validation auto en pause : déplacez un cube pour la relancer."
                     : bestWindow
                         ? "Position stable, validation en cours…"
-                        : "Gardez les deux cubes immobiles pour la validation automatique.",
+                        : "Gardez les cubes immobiles pour la validation automatique.",
             "ok"
         );
     }
-    else if (a || b) {
-        const seen = a ? cubeA : cubeB;
-        const missing = a ? cubeB : cubeA;
-        setMessage(
-            "Cube " + seen.key + " suivi",
-            "Cube " + missing.key + " : " + cubeStateText(missing) + ".",
-            "warning"
-        );
+    else if (tracked.length === 1) {
+        setMessage("1 cube suivi", "Il faut au moins 2 cubes dans l'image.", "warning");
     }
     else if (markers.length > 0) {
         setMessage(
             "Pose incomplète",
-            "ID visibles : " + markers.map(m => m.id).join(", ") +
-            " • il faut 2 faces visibles par cube.",
+            "ID visibles : " + markers.map(m => m.id).join(", "),
             "warning"
         );
     }
@@ -2457,77 +2631,68 @@ function updateStatus(markers) {
 
     const lines = [];
 
+    for (const template of templates) {
+        const f = template.faces;
+        lines.push(
+            "Cubes " + [f.xPlus, f.yPlus, f.zPlus].filter(id => id !== undefined).join(" / ") +
+            (template.dots ? " + points" : "") +
+            " • STL : " + escapeHtml(template.stlName) + " — " + escapeHtml(template.stlState)
+        );
+    }
+
     for (const cube of cubes) {
-        const f = cube.faces;
         let line =
-            "<span class='cube" + cube.key + "'>Cube " + cube.key + "</span>" +
-            " (ID " + [f.xPlus, f.yPlus, f.zPlus].filter(id => id !== undefined).join(" / ") +
-            (cube.dots ? " + points" : "") + ") : " +
+            "<span style='color:" + cubeColor(cube) + ";font-weight:650'>Cube " + cube.number + "</span> : " +
             cubeStateText(cube);
 
-        if (cube.visibleIds.length) {
-            line += " • tags : " + cube.visibleIds.join(", ");
-        }
-        if (cube.center) {
-            line += " • distance : " + (cube.center[2] * 1000).toFixed(0) + " mm";
-        }
-        if (cube.stabilityMm !== null && cube.estimate) {
-            line += " • " + stabilityLabel(cube.stabilityMm);
-        }
+        if (cube.visibleIds.length) line += " • tags : " + cube.visibleIds.join(", ");
+        if (cube.center) line += " • distance : " + (cube.center[2] * 1000).toFixed(0) + " mm";
+        if (cube.stabilityMm !== null && cube.estimate) line += " • " + stabilityLabel(cube.stabilityMm);
         if (cube.fit) {
             line +=
                 "<br>&nbsp;&nbsp;Ajustement : " + cube.fit.rms.toFixed(2) + " px" +
                 " • coins de tags : " + cube.fit.nTagPoints +
-                (cube.dots ? " • points : " + cube.fit.dots.length + " / 9" : "");
+                (cube.dots ? " • points lus : " + cube.fit.dots.length + " / 9" : "");
         }
-        line +=
-            "<br>&nbsp;&nbsp;STL " + cube.key + " : " +
-            escapeHtml(cube.stlName) + " — " + escapeHtml(cube.stlState);
-
+        else if (cube.frame && cube.dots) {
+            line += "<br>&nbsp;&nbsp;Points : non lus (face à points hors de vue ?)";
+        }
         lines.push(line);
     }
 
-    const shown = recorded ? recorded.rel : lastLiveRel;
-    if (shown) {
-        lines.push(
-            (recorded ? "<span class='ok'>Position enregistrée</span>" : "Position en direct") +
-            " — distance entre centres : " + (vecLength(shown.t) * 1000).toFixed(1) + " mm"
-        );
+    const set = recorded || liveSet;
+    if (set) {
+        for (const [cube, rel] of set.rels) {
+            lines.push(
+                (recorded ? "<span class='ok'>Enregistré</span>" : "En direct") +
+                " — cube " + cube.number + " / cube " + set.ref.number +
+                " : distance entre centres " + (vecLength(rel.t) * 1000).toFixed(2) + " mm"
+            );
+        }
     }
 
     if (recorded && recorded.spreadMm !== null) {
         lines.push(
             "Dispersion à l'enregistrement : " +
-            recorded.spreadMm.toFixed(2) + " mm • " + recorded.spreadDeg.toFixed(2) + "°" +
+            recorded.spreadMm.toFixed(3) + " mm • " + recorded.spreadDeg.toFixed(3) + "°" +
             " (moyenne de " + AUTO_WINDOW + " mesures)"
         );
     }
 
-    if (!recorded && lastLiveRel) {
+    if (!recorded && liveSet) {
         lines.push(
             stability
                 ? "Stabilité actuelle : " +
-                  stability.spreadMm.toFixed(2) + " mm • " + stability.spreadDeg.toFixed(2) + "°" +
+                  stability.spreadMm.toFixed(3) + " mm • " + stability.spreadDeg.toFixed(3) + "°" +
                   " (seuils : " + AUTO_MAX_SPREAD_MM + " mm • " + AUTO_MAX_SPREAD_DEG + "°)"
                 : "Stabilité : mesure en cours (" + relBuffer.length + " / " + AUTO_WINDOW + ")"
         );
     }
 
-    if (recorded && lastLiveRel) {
-        const gapMm = vecLength(vecSub(lastLiveRel.t, recorded.rel.t)) * 1000;
-        const gapDeg = rotationAngleDeg(lastLiveRel, recorded.rel);
-        lines.push(
-            "Écart actuel du cube B par rapport à l'enregistrement : " +
-            gapMm.toFixed(1) + " mm • " + gapDeg.toFixed(1) + "°"
-        );
-    }
-
     const others = markers
         .map(m => Number(m.id))
-        .filter(id => !cubeByTagId.has(id));
-    if (others.length) {
-        lines.push("Autres tags ignorés : " + others.join(", "));
-    }
+        .filter(id => !templateByTagId.has(id));
+    if (others.length) lines.push("Autres tags ignorés : " + others.join(", "));
 
     lines.push(
         "<span class='warning'>Calibration métrique encore provisoire (HFOV " +
@@ -2593,15 +2758,22 @@ function drawScene(markers) {
 
     for (const marker of markers) drawMarker(marker);
 
-    /* STL A : toujours lié au cube A. */
-    if (cubeA.frame) drawSTL(cubeA, cubeA.frame);
-
-    /* STL B : lié au cube B en direct, ou fixé au cube A après enregistrement. */
+    /* Un STL par cube : en direct, ou fixé par rapport au cube de référence après enregistrement. */
     if (recorded) {
-        if (cubeA.frame) drawSTL(cubeB, frameFromRelative(cubeA.frame, recorded.rel));
+        const ref = recorded.ref;
+        if (ref.frame) {
+            for (const cube of recorded.members) {
+                drawSTL(cube, cube === ref ? ref.frame : frameFromRelative(ref.frame, recorded.rels.get(cube)));
+            }
+        }
+        for (const cube of cubes) {
+            if (!recorded.members.includes(cube) && cube.frame) drawSTL(cube, cube.frame);
+        }
     }
-    else if (cubeB.frame) {
-        drawSTL(cubeB, cubeB.frame);
+    else {
+        for (const cube of cubes) {
+            if (cube.frame) drawSTL(cube, cube.frame);
+        }
     }
 
     for (const cube of cubes) {
@@ -2609,13 +2781,14 @@ function drawScene(markers) {
             const top = drawCubeAxes(cube.frame, cube.edgeM * AXIS_LENGTH_RATIO);
             if (top) {
                 drawPill(
-                    "Cube " + cube.key + (cube.held ? " · maintenu" : ""),
+                    "Cube " + cube.number + (cube.held ? " · maintenu" : ""),
                     top.x,
                     top.y - 24,
                     cubeColor(cube)
                 );
             }
         }
+        /* Points de la face à points effectivement mesurés. */
         if (cube.fit && cube.fit.dots.length) {
             overlayCtx.save();
             overlayCtx.lineWidth = 1.2;
@@ -2693,7 +2866,7 @@ function drawMarker(marker) {
     const c = marker.corners;
     if (!c || c.length < 4) return;
 
-    const cube = cubeByTagId.get(Number(marker.id));
+    const cube = marker._cube || null;
     const color = cube ? cubeColor(cube) : "rgba(255, 255, 255, .7)";
     const ctx = overlayCtx;
 
@@ -2748,10 +2921,9 @@ function stopCamera() {
     stream = null;
     video.srcObject = null;
     detectionRunning = false;
-    lastLiveRel = null;
+    liveSet = null;
     resetStability();
-
-    for (const cube of cubes) resetCubeTracking(cube);
+    cubes = [];
 
     clearOverlay();
 
@@ -2779,8 +2951,6 @@ stopButton.addEventListener("click", stopCamera);
 recordButton.addEventListener("click", toggleRecord);
 autoButton.addEventListener("click", toggleAuto);
 exportAllButton.addEventListener("click", exportAll);
-exportAButton.addEventListener("click", function() { exportCube(cubeA); });
-exportBButton.addEventListener("click", function() { exportCube(cubeB); });
 window.addEventListener("pagehide", stopCamera);
 </script>
 
