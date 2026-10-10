@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V9.5</title>
+<title>AprilTag iPad V9.7</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -305,7 +305,7 @@ button:disabled { opacity: .32; }
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V9.5";
+const VERSION = "V9.7";
 
 const TAG_SIZE_M = 0.008;             // côté du carré noir du tag (sans la marge blanche)
 const CAMERA_HFOV_DEG = 65;
@@ -441,6 +441,14 @@ const AUTO_MAX_RESIDUAL_DEG = 0.5;   // cohérence des boucles exigée (orientat
 const AUTO_MIN_SAMPLES = 24;         // mesures minimum
 const AUTO_MAX_ERROR_MM = 0.25;      // incertitude maximale de la moyenne (position)
 const AUTO_MAX_ERROR_DEG = 0.3;      // incertitude maximale de la moyenne (orientation)
+/*
+  Couleurs d'état (rendu objectif de la situation) :
+  rouge = cube pas encore relié, orange = mesure en cours, turquoise = position validée.
+*/
+const STATE_RED = [248, 113, 113];
+const STATE_ORANGE = [251, 146, 60];
+const STATE_OK = [45, 212, 191];
+
 const CUBE_COLORS = [
     [125, 211, 252], [253, 186, 116], [134, 239, 172],
     [249, 168, 212], [196, 181, 253], [253, 224, 71]
@@ -607,7 +615,7 @@ function makeCube(template) {
         rawFrame: null,             // pose de l'image courante, sans lissage
         prevRaw: null,              // pose de l'image précédente (mouvements de l'iPad)
         scene: null,                // cube de la scène auquel il correspond
-        get color() { return CUBE_COLORS[Math.max(0, this.number - 1) % CUBE_COLORS.length]; },
+        get color() { return this.scene ? this.scene.color : STATE_RED; },
         palette: null,
         ySign: template.ySign || 1,
         lastSeen: 0,
@@ -1870,13 +1878,26 @@ let scene = [];
 let pairs = new Map();
 let sceneCache = null;
 
+/* Couleur d'un cube de la scène selon l'avancement de sa mesure. */
+function sceneCubeState(s) {
+    if (recorded && recorded.members.includes(s)) return STATE_OK;
+    const sol = solveScene();
+    const needed = Math.min(AUTO_MIN_LINKS, EXPECTED_CUBES - 1);
+    let links = 0;
+    for (const pair of pairs.values()) {
+        if ((pair.a === s || pair.b === s) && pair.samples.length >= PAIR_MIN_SAMPLES) links++;
+    }
+    if (!sol.poses.has(s) || links === 0) return STATE_RED;
+    return STATE_ORANGE;
+}
+
 function makeSceneCube(template) {
     return {
         template,
         number: scene.length + 1,
         stlOffsetM: template.stlOffsetM,
         palette: null,
-        get color() { return CUBE_COLORS[(this.number - 1) % CUBE_COLORS.length]; }
+        get color() { return sceneCubeState(this); }
     };
 }
 
@@ -2175,10 +2196,9 @@ function updateScene(now) {
     }
     for (const c of visible) c.prevRaw = { ...c.rawFrame, time: now };
 
-    if (recorded) return;
-
+    /* Identification toujours active, même après validation (pour l'affichage). */
     assignScene(visible);
-    if (cameraMoving) return;
+    if (recorded || cameraMoving) return;
 
     const assigned = visible.filter(c => c.scene).sort((p, q) => p.scene.number - q.scene.number);
     for (let i = 0; i < assigned.length; i++) {
@@ -2219,12 +2239,14 @@ function drawSceneMap(sol) {
 
     for (const pair of pairs.values()) {
         const a = pts.get(pair.a), b = pts.get(pair.b);
-        const ok = pair.samples.length >= AUTO_MIN_PAIR_SAMPLES;
+        const n = pair.samples.length;
+        const ok = n >= AUTO_MIN_PAIR_SAMPLES;
+        const color = recorded ? STATE_OK : ok ? [134, 239, 172] : n >= PAIR_MIN_SAMPLES ? STATE_ORANGE : STATE_RED;
         ctx.beginPath();
         ctx.moveTo(a[0], a[1]);
         ctx.lineTo(b[0], b[1]);
-        ctx.lineWidth = (ok ? 2.5 : 1.2) * k;
-        ctx.strokeStyle = ok ? "rgba(134, 239, 172, .9)" : "rgba(252, 211, 77, .8)";
+        ctx.lineWidth = (ok || recorded ? 2.5 : 1.4) * k;
+        ctx.strokeStyle = "rgba(" + color.join(",") + ", .9)";
         ctx.stroke();
     }
 
@@ -2508,7 +2530,9 @@ let stlLayer = null;
 let stlLayerCtx = null;
 
 function stlPalette(cube) {
-    if (cube.palette) return cube.palette;
+    const key = cube.color.join(",");
+    if (cube.palette && cube.paletteKey === key) return cube.palette;
+    cube.paletteKey = key;
 
     const base = cube.color.map(c => c * STL_TINT + 244 * (1 - STL_TINT));
     cube.palette = [];
@@ -3241,7 +3265,7 @@ function updateStatus(markers) {
         setMessage(
             "Mesure en cours",
             "Incertitude ≈ " + sol.errorMm.toFixed(2) + " mm — continuez à balayer lentement.",
-            "ok"
+            "warning"
         );
     }
 
@@ -3289,10 +3313,21 @@ function updateStatus(markers) {
             " • incertitude ≈ " + q.errorMm.toFixed(3) + " mm / " + q.errorDeg.toFixed(3) + "°" +
             " • cohérence des boucles " + q.residualMm.toFixed(3) + " mm / " + q.residualDeg.toFixed(3) + "°"
         );
+        /* Positions de tous les cubes dans le repère du cube 1, puis les 6 distances entre centres. */
         const means = recorded ? recorded.rels : sol.means;
-        for (const [s, rel] of means) {
-            lines.push("&nbsp;&nbsp;Cube " + s.number + " / cube " + q.ref.number + " : " + (vecLength(rel.t) * 1000).toFixed(2) + " mm entre centres");
+        const centers = new Map([[q.ref, [0, 0, 0]]]);
+        for (const [s, rel] of means) centers.set(s, rel.t);
+        const list = [...centers.keys()].sort((u, v) => u.number - v.number);
+        const cells = [];
+        for (let i = 0; i < list.length; i++) {
+            for (let j = i + 1; j < list.length; j++) {
+                const d = vecLength(vecSub(centers.get(list[i]), centers.get(list[j]))) * 1000;
+                const pair = pairs.get(list[i].number + "-" + list[j].number);
+                cells.push("C" + list[i].number + "–C" + list[j].number + " : <b>" + d.toFixed(2) + " mm</b>" +
+                    (pair ? " <span style='color:var(--muted)'>(" + pair.samples.length + " mes.)</span>" : ""));
+            }
         }
+        lines.push("Distances entre centres :<br>&nbsp;&nbsp;" + cells.join("<br>&nbsp;&nbsp;"));
     }
     if (!recorded) {
         lines.push(
