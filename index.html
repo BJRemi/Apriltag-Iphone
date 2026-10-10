@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V10.7</title>
+<title>AprilTag iPad V10.8</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -325,13 +325,15 @@ body.mode-calib .scan-only, body:not(.mode-calib) .calib-only { display: none !i
             <div class="bar"><span id="calibViewsBar"></span></div>
             <div class="bar-label"><span>Vues inclinées</span><span id="calibTiltTxt">0 / 6</span></div>
             <div class="bar"><span id="calibTiltBar"></span></div>
+            <div class="bar-label"><span>Précision de la focale</span><span id="calibPrecTxt">—</span></div>
+            <div class="bar"><span id="calibPrecBar"></span></div>
             <div id="calibLive" class="calib-live"></div>
         </div>
         <ol class="calib-steps">
             <li>Planche de calibration imprimée à 100 % et collée bien à plat (<a href="planche_calibration_A4.pdf" target="_blank">télécharger la planche</a>).</li>
             <li>iPad tenu comme pour la mesure, à 20-30 cm : toute la planche dans l'image.</li>
             <li>Immobile une seconde → <b>bip</b>, la vue est prise. Inclinez ensuite la planche (haut, bas, gauche, droite) et placez-la dans chaque case de la grille.</li>
-            <li>La calibration se valide toute seule (flash), puis l'acquisition SCANTAG démarre. Dès 8 vues, « Valider maintenant » force le calcul.</li>
+            <li>Dès 15 vues, chaque nouvelle vue affine la focale. Quand la barre « Précision » est pleine (0,5 %), la calibration se valide toute seule (flash) et l'acquisition SCANTAG démarre.</li>
         </ol>
         <div class="buttons">
             <button id="calibNow" disabled>Valider maintenant</button>
@@ -408,7 +410,7 @@ body.mode-calib .scan-only, body:not(.mode-calib) .calib-only { display: none !i
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V10.7";
+const VERSION = "V10.8";
 
 /*
   MESURES D'IMPRESSION (V10.2)
@@ -984,7 +986,11 @@ let calibRetries = 0;
 let calibBest = null;                 // meilleur résultat obtenu (repli si la validation directe échoue)
 let calibLastMotion = null, calibLastBlur = null, calibLastState = "", calibLastTilt = null;
 let calibLastResult = null;
-let calibLastError = "";           // dernier calcul (affiché pour comprendre un refus)
+let calibLastError = "";
+let calibHistory = [];                // focales des derniers calculs (stabilité)
+let calibPrecision = null;            // précision atteinte sur la focale (fraction)
+const CALIB_TARGET_PRECISION = 0.005; // objectif : focale connue à 0,5 % près -> passage automatique
+const CALIB_MAX_VIEWS = 40;           // dernier calcul (affiché pour comprendre un refus)
 let appMode = "idle";                 // "calib" : calibration ; "scan" : acquisition SCANTAG
 
 function calibBoardPoint(id) {
@@ -1429,33 +1435,53 @@ function computeCalibration(manual) {
         calibLastError = errorText(error);
     }
     calibLastResult = res;
-    const fRatio = res ? (res.fStd ? res.fStd / res.fx : 0) : Infinity;
-    const sane = !!res && Number.isFinite(res.rms) && res.hfovDeg > 35 && res.hfovDeg < 100;
-    const quality = (rmsMax, fMax) => sane && res.rms <= rmsMax && fRatio <= fMax;
+    const sane = !!res && Number.isFinite(res.rms) && Number.isFinite(res.fx) && res.hfovDeg > 35 && res.hfovDeg < 100 && res.rms <= 8;
 
-    if (quality(CALIB_MAX_RMS_PX, CALIB_MAX_FSTD_RATIO)) {
-        acceptCalibration(res);
-        return;
+    /*
+      Précision atteinte = la plus mauvaise de :
+      - l'incertitude statistique de la focale (fStd / f) ;
+      - la stabilité : écart entre les 3 derniers calculs (chaque calcul ajoute une vue).
+      Quand elle passe sous 0,5 %, la calibration est validée et l'acquisition démarre.
+    */
+    if (sane) {
+        calibHistory.push(res.fx);
+        if (calibHistory.length > 3) calibHistory.shift();
+        const fRatio = res.fStd ? res.fStd / res.fx : 0.01;
+        const spread = calibHistory.length >= 3
+            ? (Math.max(...calibHistory) - Math.min(...calibHistory)) / res.fx
+            : Infinity;
+        calibPrecision = Math.max(fRatio, spread);
+        res.precision = calibPrecision;
+        if (!calibBest || calibPrecision <= (calibBest.precision || Infinity)) calibBest = res;
     }
-    const usable = quality(manual ? 6 : CALIB_ACCEPT_RMS_PX, manual ? 0.02 : CALIB_ACCEPT_FSTD_RATIO);
-    if (usable && (!calibBest || res.rms < calibBest.rms)) calibBest = res;
-    if (calibBest && (manual || calibRetries >= 1) &&
-        (manual || (calibBest.rms <= CALIB_ACCEPT_RMS_PX))) {
-        const best = calibBest;
-        acceptCalibration(best);
-        if (best.rms > CALIB_MAX_RMS_PX) {
-            calibNote = "<span class='warning'>Calibration acceptée avec un écart de " + fmt(best.rms, 2) +
-                " px : recollez la planche bien à plat et refaites-la pour gagner en précision.</span>";
+
+    const direct = sane && res.rms <= CALIB_MAX_RMS_PX && res.fStd && res.fStd / res.fx <= CALIB_MAX_FSTD_RATIO;
+    if (direct || (sane && calibPrecision <= CALIB_TARGET_PRECISION)) {
+        acceptCalibration(res);
+        if (res.rms > 2) {
+            calibNote = "<span class='warning'>Calibration validée (écart " + fmt(res.rms, 2) +
+                " px) : une planche mieux à plat donnerait encore mieux.</span>";
             updateCalibUI();
         }
         return;
     }
+    if (manual && calibBest) {
+        acceptCalibration(calibBest);
+        calibNote = "<span class='warning'>Calibration validée manuellement (focale à ± " +
+            fmt(100 * (calibBest.precision || 0), 2) + " %).</span>";
+        updateCalibUI();
+        return;
+    }
     calibRetries++;
-    calibNote = "<span class='warning'>" + (res
-        ? "Pas encore assez précis (écart " + fmt(res.rms, 2) + " px, focale ± " + fmt(100 * fRatio, 2) + " %, angle " + fmt(res.hfovDeg, 1) + "°)"
-        : "Calcul impossible" + (calibLastError ? " : " + escapeHtml(calibLastError) : "")) +
-        " — continuez : chaque nouvelle vue relance le calcul.</span>" +
-        (calibRetries >= 4 ? " <span class='warning'>Si rien ne change : planche bien plane ? « Données calibration » puis envoyez-moi le fichier.</span>" : "");
+    calibNote = res
+        ? "<span class='warning'>Précision " + (calibPrecision !== null && Number.isFinite(calibPrecision) ? fmt(100 * calibPrecision, 2) + " %" : "en cours") +
+          " (objectif " + (100 * CALIB_TARGET_PRECISION).toFixed(1) + " %) — continuez, chaque vue l'améliore.</span>"
+        : "<span class='error'>Calcul impossible" + (calibLastError ? " : " + escapeHtml(calibLastError) : "") + "</span>";
+    /* Au-delà de 40 vues : on oublie la plus ancienne vue de face pour garder un calcul rapide. */
+    if (calibViews.length > CALIB_MAX_VIEWS) {
+        const k = calibViews.findIndex(v => v.tilt < 15);
+        calibViews.splice(k >= 0 ? k : 0, 1);
+    }
     updateCalibUI();
 }
 
@@ -1513,6 +1539,8 @@ function enterCalibrationMode(reason) {
     calibBest = null;
     calibLastResult = null;
     calibLastTilt = null;
+    calibHistory = [];
+    calibPrecision = null;
     document.body.classList.add("mode-calib");
     setMessage("Étape 1 : calibration", reason || "Présentez la planche de calibration en entier, iPad immobile.", "warning");
     updateCalibUI();
@@ -1839,6 +1867,16 @@ function updateCalibUI() {
     const now = document.getElementById("calibNow");
     if (now) now.disabled = !calibMode || !!calibAccepted || calibViews.length < CALIB_MANUAL_MIN_VIEWS;
     setBar("calibViewsBar", "calibViewsTxt", calibAccepted ? CALIB_TARGET_VIEWS : calibViews.length, CALIB_TARGET_VIEWS);
+    {
+        const b = document.getElementById("calibPrecBar"), t = document.getElementById("calibPrecTxt");
+        if (b && t) {
+            const p = calibAccepted ? Math.min(calibPrecision || CALIB_TARGET_PRECISION, CALIB_TARGET_PRECISION) : calibPrecision;
+            const ok = p !== null && Number.isFinite(p);
+            b.style.width = (ok ? Math.min(100, 100 * CALIB_TARGET_PRECISION / Math.max(p, 1e-6)) : 0) + "%";
+            b.classList.toggle("full", ok && p <= CALIB_TARGET_PRECISION);
+            t.textContent = (ok ? "± " + (100 * p).toFixed(2) + " %" : "—") + " → objectif " + (100 * CALIB_TARGET_PRECISION).toFixed(1) + " %";
+        }
+    }
     setBar("calibTiltBar", "calibTiltTxt", calibAccepted ? CALIB_MIN_TILTED : calibTiltedCount(), CALIB_MIN_TILTED);
 
     const startCal = document.getElementById("calibStart");
