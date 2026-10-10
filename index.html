@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0a0c">
-<title>AprilTag iPad V10.2</title>
+<title>AprilTag iPad V10.3</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -203,6 +203,22 @@ button:disabled { opacity: .32; }
 .precision-text a { color: var(--a); }
 .field { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 4px; font-size: 13px; color: #b4b4bd; }
 .field input { width: 96px; min-height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; font-size: 16px; text-align: right; padding: 0 10px; }
+.steps { display: flex; gap: 6px; margin: 0 0 10px; }
+.step { flex: 1; text-align: center; padding: 8px 6px; border-radius: 12px; font-size: 12.5px; font-weight: 600; color: var(--muted); background: var(--panel); border: 1px solid var(--line); }
+.step.active { color: var(--bg); background: rgb(251, 146, 60); border-color: transparent; }
+.step.done { color: rgb(45, 212, 191); border-color: rgba(45, 212, 191, .45); }
+.step.done::before { content: "✓ "; }
+.step.skipped { color: var(--warn); }
+body.mode-calib .scan-only, body:not(.mode-calib) .calib-only { display: none !important; }
+.calib-panel { margin-top: 10px; }
+.calib-progress { margin: 2px 4px 10px; }
+.bar-label { display: flex; justify-content: space-between; font-size: 12.5px; color: #b4b4bd; margin: 8px 0 4px; font-variant-numeric: tabular-nums; }
+.bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.bar span { display: block; height: 100%; width: 0; background: rgb(251, 146, 60); transition: width .3s; }
+.bar span.full { background: rgb(45, 212, 191); }
+.calib-steps { margin: 6px 0 4px; padding-left: 26px; font-size: 13px; line-height: 1.55; color: #c8c8cf; }
+.calib-steps li { margin-bottom: 5px; }
+.calib-steps a { color: var(--a); }
 .grid-caption { margin: 14px 4px 0; font-size: 12px; color: var(--muted); }
 
 #flash {
@@ -282,6 +298,11 @@ button:disabled { opacity: .32; }
         <div id="version" class="version"></div>
     </header>
 
+    <div class="steps">
+        <div id="step1" class="step">1 · Calibration</div>
+        <div id="step2" class="step">2 · Acquisition SCANTAG</div>
+        <div id="step3" class="step">3 · Export STL</div>
+    </div>
     <div id="viewer" class="viewer">
         <video id="camera" autoplay muted playsinline></video>
         <canvas id="overlay"></canvas>
@@ -297,13 +318,32 @@ button:disabled { opacity: .32; }
         <button id="stop" class="stop hidden">Arrêter</button>
     </div>
 
-    <div class="buttons">
+    <section class="library calib-panel calib-only">
+        <div class="calib-progress">
+            <div class="bar-label"><span>Vues</span><span id="calibViewsTxt">0 / 20</span></div>
+            <div class="bar"><span id="calibViewsBar"></span></div>
+            <div class="bar-label"><span>Vues inclinées</span><span id="calibTiltTxt">0 / 8</span></div>
+            <div class="bar"><span id="calibTiltBar"></span></div>
+        </div>
+        <ol class="calib-steps">
+            <li>Planche de calibration imprimée à 100 % et collée bien à plat (<a href="planche_calibration_A4.pdf" target="_blank">télécharger la planche</a>).</li>
+            <li>iPad tenu comme pour la mesure, à 20-30 cm : toute la planche dans l'image.</li>
+            <li>Immobile une seconde → <b>bip</b>, la vue est prise. Inclinez ensuite la planche (haut, bas, gauche, droite) et placez-la dans chaque case de la grille.</li>
+            <li>La calibration se valide toute seule (flash), puis l'acquisition SCANTAG démarre.</li>
+        </ol>
+        <div class="buttons">
+            <button id="calibRestart">Recommencer la calibration</button>
+            <button id="calibSkip">Passer sans calibration</button>
+        </div>
+    </section>
+
+    <div class="buttons scan-only">
         <button id="record" class="record" disabled>Enregistrer la position</button>
         <button id="auto" class="auto on">Validation auto : oui</button>
         <button id="restart" class="restart">Recommencer</button>
     </div>
 
-    <section class="library">
+    <section class="library scan-only">
         <div class="library-title">STL à exporter sur les origines des cubes</div>
         <div id="stlList" class="stl-list"></div>
         <label class="file-button">
@@ -317,13 +357,9 @@ button:disabled { opacity: .32; }
         <div class="precision-block">
             <div class="precision-head">1. Calibration de la caméra</div>
             <div id="calibStatus" class="precision-text"></div>
-            <div class="precision-text">Imprimez la <a href="planche_calibration_A4.pdf" target="_blank">planche de calibration</a> à 100 %, collez-la à plat sur un carton rigide. Tenez l'iPad comme pour la mesure, à la même distance (≈ 20-30 cm). Filmez la planche entière, iPad immobile à chaque vue : de face, puis inclinée de 20 à 40° dans tous les sens, et placée dans tous les coins de l'image. Un bip signale chaque vue retenue.</div>
+            <div class="precision-text">La calibration est proposée au démarrage quand l'iPad n'en a pas. Refaites-la si vous changez de distance de travail, d'orientation ou d'appareil.</div>
             <div class="buttons">
-                <button id="calibStart">Calibrer la caméra</button>
-                <button id="calibCompute" class="hidden">Calculer</button>
-            </div>
-            <div class="buttons">
-                <button id="calibSave" class="hidden start">Enregistrer la calibration</button>
+                <button id="calibStart">Recalibrer la caméra</button>
                 <button id="calibClear" class="hidden">Effacer la calibration</button>
                 <button id="focusLock" class="hidden">Bloquer la mise au point</button>
             </div>
@@ -338,8 +374,8 @@ button:disabled { opacity: .32; }
             </div>
         </div>
     </details>
-    <div id="gridCaption" class="grid-caption"></div>
-    <div class="pose-grid">
+    <div id="gridCaption" class="grid-caption scan-only"></div>
+    <div class="pose-grid scan-only">
         <div class="pose-box"><div class="pose-label">ΔX</div><div id="relX" class="pose-value">—</div></div>
         <div class="pose-box"><div class="pose-label">ΔY</div><div id="relY" class="pose-value">—</div></div>
         <div class="pose-box"><div class="pose-label">ΔZ</div><div id="relZ" class="pose-value">—</div></div>
@@ -366,7 +402,7 @@ button:disabled { opacity: .32; }
    - HFOV caméra : 65°
 ============================================================ */
 
-const VERSION = "V10.2";
+const VERSION = "V10.3";
 
 /*
   MESURES D'IMPRESSION (V10.2)
@@ -923,6 +959,8 @@ const CALIB_TARGET_VIEWS = 20;        // calcul automatique à partir de 20 vues
 const CALIB_MIN_TILTED = 8;           // vues inclinées (≥ 15°) nécessaires : sans elles la focale est mal définie
 const CALIB_STILL_PX = 1.5;           // déplacement maximal des coins entre deux images (iPad immobile)
 const CALIB_MAX_RMS_PX = 0.8;         // qualité exigée de la calibration
+const CALIB_MAX_FSTD_RATIO = 0.002;   // focale connue à 0,2 % près au moins
+const CALIB_SWITCH_MS = 2200;         // délai entre la validation et le passage en acquisition
 
 let calibMode = false;
 let calibViews = [];
@@ -931,6 +969,9 @@ let calibLast = null;                 // dernière détection (dessin)
 let calibPending = null;              // résultat calculé, pas encore enregistré
 let calibActive = null;               // calibration en vigueur
 let calibNote = "";
+let calibAccepted = null;             // calibration validée, en attente du passage en acquisition
+let calibRetries = 0;
+let appMode = "idle";                 // "calib" : calibration ; "scan" : acquisition SCANTAG
 
 function calibBoardPoint(id) {
     const k = id - CALIB_BOARD.firstId;
@@ -1249,6 +1290,17 @@ function runCalibration(views, width, height) {
     let fit = calibrateLM(model, work, 40);
     if (!fit) return null;
 
+    /* Écart moyen de chaque vue (pour écarter les vues ratées si la calibration échoue). */
+    const viewRms = [];
+    {
+        let k = 0;
+        for (const v of fit.views) {
+            let s = 0;
+            for (let q = 0; q < v.pts.length; q++, k += 2) s += fit.residuals[k] ** 2 + fit.residuals[k + 1] ** 2;
+            viewRms.push(Math.sqrt(s / v.pts.length));
+        }
+    }
+
     /* Coins aberrants (> 3 σ et > 1 px) retirés, puis nouveau calcul. */
     let i = 0, removed = 0;
     const limit = Math.max(1.0, 3 * fit.rms);
@@ -1277,6 +1329,7 @@ function runCalibration(views, width, height) {
         views: fit.views.length,
         points: fit.views.reduce((s, v) => s + v.pts.length, 0),
         removed,
+        viewRms,
         hfovDeg: 2 * Math.atan((Math.max(width, height) / 2) / m.fx) * 180 / Math.PI,
         date: new Date().toISOString()
     };
@@ -1293,6 +1346,7 @@ function boardNormalAndCenter(H) {
 }
 
 function calibProcess(markers) {
+    if (calibAccepted) return { state: "done" };
     const obs = calibObservations(markers);
     calibLast = obs;
     if (!obs || !obs.H) {
@@ -1329,7 +1383,7 @@ function calibProcess(markers) {
 
     calibViews.push({ pts: obs.pts, H: obs.H, normal: geo.normal, center: geo.center, tilt: geo.tilt });
     beep(1320, 0.06);
-    if (calibViews.length >= CALIB_TARGET_VIEWS && calibTiltedCount() >= CALIB_MIN_TILTED && !calibPending) computeCalibration();
+    if (calibViews.length >= CALIB_TARGET_VIEWS && calibTiltedCount() >= CALIB_MIN_TILTED && !calibAccepted) computeCalibration();
     return { state: "added", tags: obs.tags, tilt: geo.tilt };
 }
 
@@ -1338,20 +1392,132 @@ function calibTiltedCount() {
 }
 
 function computeCalibration() {
+    let res = null;
     try {
-        calibPending = runCalibration(calibViews, analysis.width, analysis.height);
+        res = runCalibration(calibViews, analysis.width, analysis.height);
     }
     catch (error) {
         console.error(error);
-        calibPending = null;
     }
-    if (!calibPending) calibNote = "<span class='error'>Calcul impossible : reprenez des vues plus variées.</span>";
+    const good = res && res.rms <= CALIB_MAX_RMS_PX && res.views >= CALIB_MIN_VIEWS &&
+        (!res.fStd || res.fStd / res.fx <= CALIB_MAX_FSTD_RATIO);
+    if (good) {
+        acceptCalibration(res);
+        return;
+    }
+
+    /* Validation refusée : on retire les vues les moins bonnes et on continue la prise de vues. */
+    calibRetries++;
+    let dropped = 0;
+    if (res && res.viewRms && res.viewRms.length === calibViews.length) {
+        const med = median(res.viewRms);
+        const limit = Math.max(CALIB_MAX_RMS_PX, 1.5 * med);
+        let keep = calibViews.filter((v, k) => res.viewRms[k] <= limit);
+        if (keep.length === calibViews.length) {
+            const order = res.viewRms.map((e, k) => [e, k]).sort((p, q) => q[0] - p[0]);
+            const worst = new Set(order.slice(0, Math.ceil(calibViews.length / 4)).map(o => o[1]));
+            keep = calibViews.filter((v, k) => !worst.has(k));
+        }
+        dropped = calibViews.length - keep.length;
+        calibViews = keep;
+    }
+    else {
+        dropped = Math.ceil(calibViews.length / 4);
+        calibViews = calibViews.slice(dropped);
+    }
+    calibNote = "<span class='warning'>Calibration pas encore assez précise" +
+        (res ? " (écart " + fmt(res.rms, 2) + " px)" : "") + " : " + dropped +
+        " vues moins bonnes retirées, continuez.</span>" +
+        (calibRetries >= 3 ? " <span class='warning'>Vérifiez que la planche est bien plane et l'image nette.</span>" : "");
     updateCalibUI();
+}
+
+function acceptCalibration(res) {
+    if (!storeCalibration(res)) {
+        calibNote = "<span class='error'>Calibration valable mais non mémorisée (navigation privée ?) : elle sert jusqu'à la fermeture de la page.</span>";
+        sessionCalibration = res;
+    }
+    else {
+        sessionCalibration = null;
+    }
+    applyCalibrationToCamera();
+    calibAccepted = res;
+    calibPending = res;
+    flashSignal();
+    setMessage("Calibration validée ✓", "Angle de vue " + fmt(res.hfovDeg, 2) + "°, écart " + fmt(res.rms, 2) +
+        " px. Passage en acquisition SCANTAG…", "ok");
+    updateCalibUI();
+    updateSteps();
+    setTimeout(() => { if (calibAccepted === res) enterScanMode(); }, CALIB_SWITCH_MS);
+}
+
+/* ---------- Modes de l'application ---------- */
+
+function enterCalibrationMode(reason) {
+    appMode = "calib";
+    calibMode = true;
+    calibViews = [];
+    calibPrev = null;
+    calibLast = null;
+    calibPending = null;
+    calibAccepted = null;
+    calibRetries = 0;
+    document.body.classList.add("mode-calib");
+    setMessage("Étape 1 : calibration", reason || "Présentez la planche de calibration en entier, iPad immobile.", "warning");
+    updateCalibUI();
+    updateSteps();
+}
+
+function enterScanMode() {
+    appMode = "scan";
+    calibMode = false;
+    calibViews = [];
+    calibAccepted = null;
+    calibPending = null;
+    document.body.classList.remove("mode-calib");
+    restartMeasure();
+    if (stream) {
+        setMessage("Étape 2 : acquisition SCANTAG",
+            cameraModel && cameraModel.calibrated
+                ? "Caméra calibrée. Balayez lentement les cubes."
+                : "Sans calibration : précision réduite. Balayez lentement les cubes.",
+            cameraModel && cameraModel.calibrated ? "ok" : "warning");
+    }
+    updateCalibUI();
+    updateSteps();
+}
+
+/* Au démarrage de la caméra : calibration d'abord si l'iPad n'en a pas pour ce format. */
+function chooseStartMode() {
+    if (cameraModel && cameraModel.calibrated) enterScanMode();
+    else enterCalibrationMode(calibNote ? calibNote.replace(/<[^>]+>/g, "") : "Aucune calibration pour cet iPad : présentez la planche de calibration.");
+}
+
+function updateSteps() {
+    const s1 = document.getElementById("step1"), s2 = document.getElementById("step2"), s3 = document.getElementById("step3");
+    if (!s1) return;
+    const calibrated = cameraModel && cameraModel.calibrated;
+    s1.className = "step " + (appMode === "calib" ? (calibAccepted ? "done" : "active") : calibrated ? "done" : appMode === "scan" ? "skipped" : "");
+    s2.className = "step " + (appMode === "scan" ? (recorded ? "done" : "active") : "");
+    s3.className = "step " + (appMode === "scan" && recorded ? "active" : "");
+}
+
+function flashSignal() {
+    const flash = document.getElementById("flash");
+    flash.classList.remove("on");
+    void flash.offsetWidth;
+    flash.classList.add("on");
+    beep(880, 0.14);
+    setTimeout(() => beep(1320, 0.16), 120);
+    if (navigator.vibrate) navigator.vibrate(120);
 }
 
 /* ---------- Mémoire et application ---------- */
 
+let sessionCalibration = null;        // calibration valable si le stockage du navigateur est refusé
+
 function loadStoredCalibration() {
+    if (sessionCalibration) return sessionCalibration;
     try {
         const raw = localStorage.getItem(CALIB_STORAGE_KEY);
         return raw ? JSON.parse(raw) : null;
@@ -1579,7 +1745,7 @@ function updateCalibUI() {
     if (calibPending) {
         const p = calibPending;
         const good = p.rms <= CALIB_MAX_RMS_PX;
-        lines.push("<span class='" + (good ? "ok" : "warning") + "'>Résultat</span> : focale " + fmt(p.fx, 1) + " px" +
+        lines.push("<span class='" + (good ? "ok" : "warning") + "'>" + (calibAccepted ? "Calibration validée" : "Résultat") + "</span> : focale " + fmt(p.fx, 1) + " px" +
             (p.fStd ? " ± " + fmt(p.fStd, 1) : "") + " (angle de vue " + fmt(p.hfovDeg, 2) + "°), centre " +
             fmt(p.cx, 1) + " ; " + fmt(p.cy, 1) + ", déformation k1 " + fmt(p.k1, 4) + " k2 " + fmt(p.k2, 4) +
             ", écart résiduel <b>" + fmt(p.rms, 2) + " px</b> sur " + p.points + " coins (" + p.views + " vues" +
@@ -1598,78 +1764,55 @@ function updateCalibUI() {
     lines.push("Mise au point bloquable : " + escapeHtml(focusSupport) + (focusLocked ? " — <span class='ok'>bloquée</span>" : ""));
     el.innerHTML = lines.join("<br>");
 
+    const setBar = (bar, txt, n, total) => {
+        const b = document.getElementById(bar), t = document.getElementById(txt);
+        if (!b || !t) return;
+        b.style.width = Math.min(100, 100 * n / total) + "%";
+        b.classList.toggle("full", n >= total);
+        t.textContent = Math.min(n, total) + " / " + total;
+    };
+    setBar("calibViewsBar", "calibViewsTxt", calibAccepted ? CALIB_TARGET_VIEWS : calibViews.length, CALIB_TARGET_VIEWS);
+    setBar("calibTiltBar", "calibTiltTxt", calibAccepted ? CALIB_MIN_TILTED : calibTiltedCount(), CALIB_MIN_TILTED);
+
     const startCal = document.getElementById("calibStart");
-    const compute = document.getElementById("calibCompute");
-    const save = document.getElementById("calibSave");
     const clear = document.getElementById("calibClear");
     const focus = document.getElementById("focusLock");
-    startCal.textContent = calibMode ? "Quitter la calibration" : "Calibrer la caméra";
+    startCal.textContent = calibMode ? "Quitter la calibration" : "Recalibrer la caméra";
     startCal.disabled = !stream;
-    compute.classList.toggle("hidden", !calibMode);
-    compute.disabled = calibViews.length < CALIB_MIN_VIEWS;
-    save.classList.toggle("hidden", !calibPending);
-    save.disabled = !calibPending || calibPending.rms > 2 * CALIB_MAX_RMS_PX;
     clear.classList.toggle("hidden", !stored || calibMode);
     focus.classList.toggle("hidden", focusSupport !== "oui" && !focusLocked);
     focus.textContent = focusLocked ? "Libérer la mise au point" : "Bloquer la mise au point";
 }
 
 function toggleCalibMode() {
-    calibMode = !calibMode;
-    calibViews = [];
-    calibPrev = null;
-    calibLast = null;
-    calibPending = null;
-    if (calibMode) {
-        /* Mesures faites avec l'ancienne caméra : on repart de zéro après la calibration. */
-        setMessage("Calibration", "Filmez la planche imprimée, iPad immobile à chaque vue.", "warning");
-    }
-    else {
-        restartMeasure();
-    }
-    updateCalibUI();
-}
-
-function saveCalibration() {
-    if (!calibPending) return;
-    if (!storeCalibration(calibPending)) {
-        calibNote = "<span class='error'>Impossible d'enregistrer dans ce navigateur (navigation privée ?).</span>";
-    }
-    calibPending = null;
-    calibMode = false;
-    calibViews = [];
-    applyCalibrationToCamera();
-    restartMeasure();
-    signalValidation();
-    updateCalibUI();
+    if (appMode === "calib") enterScanMode();
+    else enterCalibrationMode();
 }
 
 function clearCalibration() {
     if (!confirm("Effacer la calibration de la caméra ?")) return;
     storeCalibration(null);
+    sessionCalibration = null;
     applyCalibrationToCamera();
     restartMeasure();
     updateCalibUI();
+    updateSteps();
 }
 
 function calibStatusMessage(res) {
+    if (calibAccepted) return;
     const n = calibViews.length;
     const tilted = calibTiltedCount();
-    const prefix = "Vues " + n + " / " + CALIB_TARGET_VIEWS + " • inclinées " + tilted + " / " + CALIB_MIN_TILTED;
-    if (calibPending) {
-        setMessage("Calibration calculée", "Écart " + fmt(calibPending.rms, 2) + " px. Touchez « Enregistrer la calibration ».",
-            calibPending.rms <= CALIB_MAX_RMS_PX ? "ok" : "warning");
-        return;
-    }
+    const prefix = "Étape 1 : calibration — " + n + " / " + CALIB_TARGET_VIEWS + " vues";
     const hint = tilted < CALIB_MIN_TILTED
-        ? "Inclinez la planche de 20 à 40° (haut, bas, gauche, droite)."
-        : "Changez de position : planche dans les coins et sur les bords de l'image.";
+        ? "Inclinez maintenant la planche de 20 à 40° (haut, bas, gauche, droite)."
+        : "Placez la planche dans les cases de la grille encore vides.";
     const texts = {
-        board: "Planche non vue en entier (" + (res.tags || 0) + " tags) : reculez un peu, " + CALIB_MIN_TAGS + " tags au moins.",
+        board: (res.tags ? "Planche vue en partie (" + res.tags + " tags) : reculez un peu." : "Présentez la planche de calibration en entier."),
         move: "Tenez l'iPad immobile une seconde.",
         blur: "Image floue : immobilisez l'iPad, attendez la mise au point.",
         same: "Vue déjà prise. " + hint,
-        added: "Vue ajoutée ✓ " + hint
+        added: "Vue prise ✓ " + hint
     };
     setMessage(prefix, texts[res.state] || hint, res.state === "added" ? "ok" : "warning");
 }
@@ -1678,6 +1821,26 @@ function drawCalibOverlay() {
     clearOverlay();
     const ctx = overlayCtx;
     ctx.setTransform(overlayScale, 0, 0, overlayScale, 0, 0);
+
+    /* Grille 3 × 3 : cases où la planche a déjà été placée. */
+    ctx.save();
+    const W = analysis.width, H = analysis.height;
+    for (let gx = 0; gx < 3; gx++) {
+        for (let gy = 0; gy < 3; gy++) {
+            const x0 = gx * W / 3, y0 = gy * H / 3;
+            const n = calibViews.filter(v => v.center[0] >= x0 && v.center[0] < x0 + W / 3 && v.center[1] >= y0 && v.center[1] < y0 + H / 3).length;
+            if (n) {
+                ctx.fillStyle = "rgba(45, 212, 191, " + Math.min(0.28, 0.1 + 0.06 * n) + ")";
+                ctx.fillRect(x0, y0, W / 3, H / 3);
+            }
+            ctx.strokeStyle = "rgba(255, 255, 255, .28)";
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([8, 8]);
+            ctx.strokeRect(x0, y0, W / 3, H / 3);
+            ctx.setLineDash([]);
+        }
+    }
+    ctx.restore();
 
     /* Couverture de l'image : centres des vues déjà prises. */
     ctx.save();
@@ -1896,8 +2059,8 @@ async function startCamera() {
         startButton.classList.add("hidden");
         stopButton.classList.remove("hidden");
         detectFocusSupport();
+        chooseStartMode();
 
-        setMessage("Recherche AprilTag…", "Présentez les deux cubes devant la caméra.", "warning");
 
         animationId = requestAnimationFrame(scanFrame);
     }
@@ -4206,6 +4369,7 @@ function updateButtonsAndGrid() {
     autoButton.className = autoEnabled ? "auto on" : "auto";
 
     renderStlList();
+    updateSteps();
 }
 
 
@@ -4685,6 +4849,12 @@ function stopCamera() {
     startButton.disabled = false;
     startButton.classList.remove("hidden");
     stopButton.classList.add("hidden");
+    appMode = "idle";
+    calibMode = false;
+    calibAccepted = null;
+    document.body.classList.remove("mode-calib");
+    updateSteps();
+    updateCalibUI();
 
     updateButtonsAndGrid();
 
@@ -4753,8 +4923,8 @@ restartButton.addEventListener("click", restartMeasure);
 autoButton.addEventListener("click", toggleAuto);
 window.addEventListener("pagehide", stopCamera);
 document.getElementById("calibStart").addEventListener("click", toggleCalibMode);
-document.getElementById("calibCompute").addEventListener("click", computeCalibration);
-document.getElementById("calibSave").addEventListener("click", saveCalibration);
+document.getElementById("calibRestart").addEventListener("click", () => enterCalibrationMode());
+document.getElementById("calibSkip").addEventListener("click", enterScanMode);
 document.getElementById("calibClear").addEventListener("click", clearCalibration);
 document.getElementById("focusLock").addEventListener("click", toggleFocusLock);
 const printTagInput = document.getElementById("printTag");
